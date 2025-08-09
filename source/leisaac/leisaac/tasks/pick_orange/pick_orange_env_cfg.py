@@ -167,12 +167,26 @@ class PickOrangeSceneCfg(InteractiveSceneCfg):
     )
 
 
+# @configclass
+# class ActionsCfg:
+#     """Configuration for the actions."""
+#     arm_action: mdp.ActionTermCfg = MISSING
+#     gripper_action: mdp.ActionTermCfg = MISSING
+
 @configclass
 class ActionsCfg:
     """Configuration for the actions."""
-    arm_action: mdp.ActionTermCfg = MISSING
-    gripper_action: mdp.ActionTermCfg = MISSING
-
+    arm_action: mdp.JointPositionActionCfg = mdp.JointPositionActionCfg(
+        asset_name="robot",
+        joint_names=["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"],
+        scale=1.0,
+        # Note: no use_default_offset parameter (not in your teleop version)
+    )
+    gripper_action: mdp.JointPositionActionCfg = mdp.JointPositionActionCfg(
+        asset_name="robot",
+        joint_names=["gripper"],
+        scale=1.0,
+    )
 
 @configclass
 class EventCfg:

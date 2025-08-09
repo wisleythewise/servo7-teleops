@@ -6,11 +6,12 @@
 """
 Script to add mimic annotations to demos to be used as source demos for mimic dataset generation.
 
-python scripts/imitation_learning/isaaclab_mimic/annotate_demos.py --task=LeIsaac-SO101-PickOrange-v0 --auto --input_file scripts/datasets/filtered_data_set.hdf5 --output_file scripts/datasets/annotated_dataset.hdf5 
+python scripts/imitation_learning/isaaclab_mimic/annotate_demos.py --task=LeIsaac-SO101-PickOrange-v0 --input_file scripts/datasets/filtered_data_set.hdf5 --output_file scripts/datasets/annotated_dataset.hdf5 --enable_cameras
 
 """
 
 import argparse
+from dataclasses import MISSING
 
 from isaaclab.app import AppLauncher
 
@@ -74,6 +75,7 @@ from isaaclab.utils import configclass
 from isaaclab.utils.datasets import EpisodeData, HDF5DatasetFileHandler
 
 import isaaclab_tasks  # noqa: F401
+import leisaac 
 from isaaclab_tasks.utils.parse_cfg import parse_env_cfg
 
 is_paused = False
