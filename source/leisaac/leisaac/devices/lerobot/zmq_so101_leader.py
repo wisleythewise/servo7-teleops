@@ -30,7 +30,7 @@ def degrees_to_radians(degrees: float) -> float:
 
 
 """
-python scripts/environments/teleoperation/teleop_se3_agent.py --task=LeIsaac-SO101-LiftCube-DigitalTwin-v0 --teleop_device=zmq-so101leader --num_envs=1 --device=cpu --enable_cameras --record --dataset_file=./datasets/dataset.hdf5
+python scripts/environments/teleoperation/teleop_se3_agent.py --task=LeIsaac-SO101-PickOrange-v0 --teleop_device=zmq-so101leader --num_envs=1 --device=cpu --enable_cameras --record --dataset_file=./datasets/dataset.hdf5
 
 """
 

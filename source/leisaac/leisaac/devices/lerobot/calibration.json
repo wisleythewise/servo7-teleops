@@ -4,7 +4,7 @@
         "drive_mode": 0,
         "homing_offset": 32,
         "range_min": 0,
-        "range_max": 4095
+        "range_max": 3000 
     },
     "shoulder_lift": {
         "id": 2,
