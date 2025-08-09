@@ -2,7 +2,7 @@ import h5py
 import numpy as np
 
 # Open and inspect the dataset
-with h5py.File('./datasets/first_real_data_set.hdf5', 'r') as f:
+with h5py.File('./datasets/filtered_data_set.hdf5', 'r') as f:
     print("Root level keys:", list(f.keys()))
     
     # Go one level deeper for each root key
@@ -15,12 +15,12 @@ with h5py.File('./datasets/first_real_data_set.hdf5', 'r') as f:
             if hasattr(item, 'keys'):  # Check if it's a group
                 print(f"  {key}/{subkey} contains:", list(item.keys()))
                 
-                # Go one more level deeper
-                for subsubkey in item.keys():
-                    subitem = item[subsubkey]
-                    if hasattr(subitem, 'keys'):  # Check if it's a group
-                        print(f"    {key}/{subkey}/{subsubkey} contains:", list(subitem.keys()))
-                    else:  # It's a dataset
-                        print(f"    {key}/{subkey}/{subsubkey} is a dataset with shape:", subitem.shape)
+                # # Go one more level deeper
+                # for subsubkey in item.keys():
+                #     subitem = item[subsubkey]
+                #     if hasattr(subitem, 'keys'):  # Check if it's a group
+                #         print(f"    {key}/{subkey}/{subsubkey} contains:", list(subitem.keys()))
+                #     else:  # It's a dataset
+                #         print(f"    {key}/{subkey}/{subsubkey} is a dataset with shape:", subitem.shape)
             else:  # It's a dataset
                 print(f"  {key}/{subkey} is a dataset with shape:", item.shape)
