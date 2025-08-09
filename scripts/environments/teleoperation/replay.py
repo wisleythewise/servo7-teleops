@@ -39,7 +39,10 @@ from isaaclab_tasks.utils import parse_env_cfg
 import leisaac  # noqa: F401
 from leisaac.utils.env_utils import get_task_type
 
+"""
+python scripts/environments/teleoperation/replay.py --task=LeIsaac-SO101-PickOrange-v0 --num_envs=1 --device=cpu --enable_cameras --dataset_file=./datasets/first_real_data_set.hdf5 --episode_index=2
 
+"""
 class RateLimiter:
     """Convenience class for enforcing rates in loops."""
 
