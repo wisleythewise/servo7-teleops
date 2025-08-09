@@ -31,15 +31,14 @@ from . import mdp
 class PickOrangeSceneCfg(InteractiveSceneCfg):
     """Scene configuration for the pick orange task using Jappie's table and cube scene."""
 
-    # Ground plane
+    # Ground plane - shared across all environments
     ground = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Ground",
+        prim_path="/World/ground",
         spawn=sim_utils.GroundPlaneCfg(size=(100.0, 100.0)),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0))
     )
     
     # Table 
-    table = AssetBaseCfg(
+    table: AssetBaseCfg = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Table", 
         spawn=sim_utils.CuboidCfg(
             size=(1.2, 0.8, 0.74),  # Table dimensions
@@ -59,10 +58,10 @@ class PickOrangeSceneCfg(InteractiveSceneCfg):
     )
     
     # Cube to pick
-    cube = RigidObjectCfg(
+    cube: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Cube",
         spawn=sim_utils.CuboidCfg(
-            size=(0.05, 0.05, 0.05),
+            size=(0.03, 0.03, 0.03),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 solver_position_iteration_count=16,
                 solver_velocity_iteration_count=1,
@@ -71,12 +70,20 @@ class PickOrangeSceneCfg(InteractiveSceneCfg):
                 max_depenetration_velocity=5.0,
                 disable_gravity=False,
             ),
-            mass_props=sim_utils.MassPropertiesCfg(mass=0.1),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
+            mass_props=sim_utils.MassPropertiesCfg(mass=0.05),  # Lighter mass (50g) for easier pickup
+            collision_props=sim_utils.CollisionPropertiesCfg(
+                collision_enabled=True,
+            ),
+            # Add physics material for better grip
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=2.0,  # High static friction for better grip
+                dynamic_friction=1.5,  # Dynamic friction when sliding
+                restitution=0.0,  # No bounce
+            ),
             visual_material=sim_utils.PreviewSurfaceCfg(
                 diffuse_color=(1.0, 0.0, 0.0),
                 metallic=0.0,
-                roughness=0.5,
+                roughness=0.8,  # Visual roughness
             )
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
@@ -87,6 +94,12 @@ class PickOrangeSceneCfg(InteractiveSceneCfg):
 
     # The robot
     robot: ArticulationCfg = SO101_FOLLOWER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    
+    # Lighting - shared across all environments
+    dome_light = AssetBaseCfg(
+        prim_path="/World/DomeLight",
+        spawn=sim_utils.DomeLightCfg(color=(0.9, 0.9, 0.9), intensity=500.0),
+    )
 
     wrist: TiledCameraCfg = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/gripper/wrist_camera",
@@ -214,14 +227,14 @@ class PickOrangeEnvCfg(ManagerBasedRLEnvCfg):
         # parse_usd_and_create_subassets(KITCHEN_WITH_ORANGE_USD_PATH, self, specific_name_list=['Orange001', 'Orange002', 'Orange003', 'Plate'])
 
         # Domain randomization for the cube
-        domain_randomization(self, random_options=[
-            randomize_object_uniform("cube", pose_range={"x": (-0.1, 0.1), "y": (-0.1, 0.1), "z": (0.0, 0.0)}),
-            randomize_camera_uniform("front", pose_range={
-                "x": (-0.05, 0.05), "y": (-0.05, 0.05), "z": (-0.05, 0.05),
-                "roll": (-5 * torch.pi / 180, 5 * torch.pi / 180),
-                "pitch": (-5 * torch.pi / 180, 5 * torch.pi / 180),
-                "yaw": (-5 * torch.pi / 180, 5 * torch.pi / 180)}, convention="ros"),
-        ])
+        # domain_randomization(self, random_options=[
+        #     randomize_object_uniform("cube", pose_range={"x": (-0.1, 0.1), "y": (-0.1, 0.1), "z": (0.0, 0.0)}),
+        #     randomize_camera_uniform("front", pose_range={
+        #         "x": (-0.05, 0.05), "y": (-0.05, 0.05), "z": (-0.05, 0.05),
+        #         "roll": (-5 * torch.pi / 180, 5 * torch.pi / 180),
+        #         "pitch": (-5 * torch.pi / 180, 5 * torch.pi / 180),
+        #         "yaw": (-5 * torch.pi / 180, 5 * torch.pi / 180)}, convention="ros"),
+        # ])
 
     def use_teleop_device(self, teleop_device) -> None:
         self.actions = init_action_cfg(self.actions, device=teleop_device)
