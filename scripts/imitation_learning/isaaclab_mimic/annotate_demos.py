@@ -6,7 +6,7 @@
 """
 Script to add mimic annotations to demos to be used as source demos for mimic dataset generation.
 
-python scripts/imitation_learning/isaaclab_mimic/annotate_demos.py --task=LeIsaac-SO101-PickOrange-v0 --input_file scripts/datasets/filtered_data_set.hdf5 --output_file scripts/datasets/annotated_dataset.hdf5 --enable_cameras
+python scripts/imitation_learning/isaaclab_mimic/annotate_demos.py --task=LeIsaac-SO101-PickOrange-Mimic-v0 --input_file scripts/datasets/filtered_data_set.hdf5 --output_file scripts/datasets/annotated_dataset.hdf5 --enable_cameras
 
 """
 
@@ -235,7 +235,7 @@ def main():
     env.reset()
 
     # Only enables inputs if this script is NOT headless mode
-    if not args_cli.headless and not os.environ.get("HEADLESS", 0):
+    if True:
         keyboard_interface = Se3Keyboard(pos_sensitivity=0.1, rot_sensitivity=0.1)
         keyboard_interface.add_callback("N", play_cb)
         keyboard_interface.add_callback("B", pause_cb)

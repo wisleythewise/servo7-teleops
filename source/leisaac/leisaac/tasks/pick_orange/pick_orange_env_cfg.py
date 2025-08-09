@@ -173,6 +173,28 @@ class PickOrangeSceneCfg(InteractiveSceneCfg):
 #     arm_action: mdp.ActionTermCfg = MISSING
 #     gripper_action: mdp.ActionTermCfg = MISSING
 
+from dataclasses import dataclass
+
+@dataclass
+class SubtaskConfig:
+    """Configuration for a subtask."""
+    subtask_term_signal: str
+    subtask_term_func: callable = None  # Optional, for auto mode
+
+@configclass
+class SubtaskConfigs:
+    """Subtask configurations for the pick task."""
+    eef: list = [
+        SubtaskConfig(
+            subtask_term_signal="pick_cube",
+            # No func needed for manual mode
+        ),
+        SubtaskConfig(
+            subtask_term_signal="task_complete",
+            # This is the final subtask (overall success)
+        ),
+    ]
+
 @configclass
 class ActionsCfg:
     """Configuration for the actions."""
@@ -250,6 +272,14 @@ class PickOrangeEnvCfg(ManagerBasedRLEnvCfg):
     terminations: TerminationsCfg = TerminationsCfg()
 
     recorders: RecordTerm = RecordTerm()
+
+        # Add subtask configuration
+    subtask_configs = {
+        "eef": [
+            SubtaskConfig(subtask_term_signal="pick_cube"),
+            SubtaskConfig(subtask_term_signal="task_complete"),
+        ]
+    }
 
     def __post_init__(self) -> None:
         super().__post_init__()
