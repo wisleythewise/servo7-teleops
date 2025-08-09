@@ -236,13 +236,34 @@ def main():
 
     # Only enables inputs if this script is NOT headless mode
     if True:
-        keyboard_interface = Se3Keyboard(pos_sensitivity=0.1, rot_sensitivity=0.1)
-        keyboard_interface.add_callback("N", play_cb)
-        keyboard_interface.add_callback("B", pause_cb)
-        keyboard_interface.add_callback("Q", skip_episode_cb)
-        if not args_cli.auto:
-            keyboard_interface.add_callback("S", mark_subtask_cb)
-        keyboard_interface.reset()
+        from pynput import keyboard
+        
+        def on_press(key):
+            global is_paused, skip_episode, marked_subtask_action_indices, current_action_index
+            try:
+                if hasattr(key, 'char'):
+                    if key.char == 'n' or key.char == 'N':
+                        is_paused = False
+                        print("Playing...")
+                    elif key.char == 'b' or key.char == 'B':
+                        is_paused = True
+                        print("Paused")
+                    elif key.char == 'q' or key.char == 'Q':
+                        skip_episode = True
+                        print("Skipping episode")
+                    elif key.char == 's' or key.char == 'S':
+                        if not args_cli.auto:
+                            marked_subtask_action_indices.append(current_action_index)
+                            print(f"Marked subtask at action index: {current_action_index}")
+            except AttributeError:
+                pass
+        
+        # Start keyboard listener
+        from pynput.keyboard import Listener
+        listener = Listener(on_press=on_press)
+        listener.start()
+        print("Keyboard listener started")
+    
 
     # simulate environment -- run everything in inference mode
     exported_episode_count = 0
