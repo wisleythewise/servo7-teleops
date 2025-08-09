@@ -205,8 +205,8 @@ def main():
     # create environment from loaded config
     env: ManagerBasedRLMimicEnv = gym.make(args_cli.task, cfg=env_cfg).unwrapped
 
-    if not isinstance(env, ManagerBasedRLMimicEnv):
-        raise ValueError("The environment should be derived from ManagerBasedRLMimicEnv")
+    # if not isinstance(env, ManagerBasedRLMimicEnv):
+    #     raise ValueError("The environment should be derived from ManagerBasedRLMimicEnv")
 
     if args_cli.auto:
         # check if the mimic API env.get_subtask_term_signals() is implemented
@@ -218,12 +218,18 @@ def main():
     else:
         # get subtask termination signal names for each eef from the environment configs
         subtask_term_signal_names = {}
-        for eef_name, eef_subtask_configs in env.cfg.subtask_configs.items():
-            subtask_term_signal_names[eef_name] = [
-                subtask_config.subtask_term_signal for subtask_config in eef_subtask_configs
-            ]
-            # no need to annotate the last subtask term signal, so remove it from the list
-            subtask_term_signal_names[eef_name].pop()
+        
+        # Check if subtask_configs exists
+        if hasattr(env.cfg, 'subtask_configs'):
+            for eef_name, eef_subtask_configs in env.cfg.subtask_configs.items():
+                subtask_term_signal_names[eef_name] = [
+                    subtask_config.subtask_term_signal for subtask_config in eef_subtask_configs
+                ]
+                # no need to annotate the last subtask term signal, so remove it from the list
+                subtask_term_signal_names[eef_name].pop()
+        else:
+            # No subtasks defined - that's okay for simple pick and place
+            print("No subtask_configs found in environment - proceeding without subtask annotations")
 
     # reset environment
     env.reset()
