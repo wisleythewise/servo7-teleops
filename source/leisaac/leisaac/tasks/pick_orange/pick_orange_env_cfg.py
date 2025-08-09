@@ -250,7 +250,7 @@ class PickOrangeEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.render.enable_translucency = True
 
         # Position robot on the table (table height is 0.74m)
-        self.scene.robot.init_state.pos = (0.35, 0.0, 0.74)  # x: back from table edge, y: centered, z: on table
+        self.scene.robot.init_state.pos = (0.35, 0.0, 0.73)  # x: back from table edge, y: centered, z: on table
         
         # No need for parse_usd_and_create_subassets since we're creating objects programmatically
         # parse_usd_and_create_subassets(KITCHEN_WITH_ORANGE_USD_PATH, self, specific_name_list=['Orange001', 'Orange002', 'Orange003', 'Plate'])
@@ -264,6 +264,10 @@ class PickOrangeEnvCfg(ManagerBasedRLEnvCfg):
         #         "pitch": (-5 * torch.pi / 180, 5 * torch.pi / 180),
         #         "yaw": (-5 * torch.pi / 180, 5 * torch.pi / 180)}, convention="ros"),
         # ])
+        self.scene.cube.init_state.pos = list(self.scene.cube.init_state.pos)
+        self.scene.cube.init_state.pos[0] -= torch.rand(1).item() * .05  
+        self.scene.cube.init_state.pos[1] +=torch.rand(1).item() * .05 
+        self.scene.cube.init_state.pos = tuple(self.scene.cube.init_state.pos)
 
     def use_teleop_device(self, teleop_device) -> None:
         self.actions = init_action_cfg(self.actions, device=teleop_device)
