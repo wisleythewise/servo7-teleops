@@ -401,9 +401,9 @@ class ZMQSO101Leader(Device):
         # Override gripper position if halfway mode is active
         if self._gripper_halfway:
             # Set gripper to halfway position (pi/4 radians = 45 degrees)
-            state["gripper"] = np.pi / 4
+            state["gripper"] = np.pi / 12
         else: 
-            state["gripper"] = np.pi / 2 
+            state["gripper"] = np.pi / 3 
         
         if as_degrees:
             return {name: radians_to_degrees(val) for name, val in state.items()}
