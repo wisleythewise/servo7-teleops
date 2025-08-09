@@ -41,7 +41,7 @@ class PickOrangeSceneCfg(InteractiveSceneCfg):
     table: AssetBaseCfg = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Table", 
         spawn=sim_utils.CuboidCfg(
-            size=(1.2, 0.8, 0.74),  # Table dimensions
+            size=(1.2, 0.8, 0.75),  # Table dimensions
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 kinematic_enabled=True,
                 disable_gravity=True,
@@ -87,7 +87,36 @@ class PickOrangeSceneCfg(InteractiveSceneCfg):
             )
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(0.6, 0.0, 0.77),
+            pos=(0.6, -.05, 0.78),
+            rot=(1.0, 0.0, 0.0, 0.0),
+        )
+    )
+
+    # Low wall along x-axis on the table
+    wall: AssetBaseCfg = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Wall",
+        spawn=sim_utils.CuboidCfg(
+            size=(0.6, 0.02, 0.05),  # Length along x-axis, thin in y, low height
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                kinematic_enabled=True,  # Static wall
+                disable_gravity=True,
+            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(
+                collision_enabled=True,
+            ),
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                static_friction=1.0,
+                dynamic_friction=0.8,
+                restitution=0.1,
+            ),
+            visual_material=sim_utils.PreviewSurfaceCfg(
+                diffuse_color=(0.6, 0.6, 0.6),  # Gray color
+                metallic=0.0,
+                roughness=0.9,
+            )
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(
+            pos=(0.8, 0.0, 0.765),  # On table surface (table height 0.74 + wall height/2)
             rot=(1.0, 0.0, 0.0, 0.0),
         )
     )
@@ -221,7 +250,7 @@ class PickOrangeEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.render.enable_translucency = True
 
         # Position robot on the table (table height is 0.74m)
-        self.scene.robot.init_state.pos = (0.35, 0.0, 0.75)  # x: back from table edge, y: centered, z: on table
+        self.scene.robot.init_state.pos = (0.35, 0.0, 0.74)  # x: back from table edge, y: centered, z: on table
         
         # No need for parse_usd_and_create_subassets since we're creating objects programmatically
         # parse_usd_and_create_subassets(KITCHEN_WITH_ORANGE_USD_PATH, self, specific_name_list=['Orange001', 'Orange002', 'Orange003', 'Plate'])
