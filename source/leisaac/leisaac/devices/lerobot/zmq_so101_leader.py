@@ -139,6 +139,7 @@ class ZMQSO101Leader(Device):
         # Control flags and callbacks
         self._started = False
         self._reset_state = False
+        self._gripper_halfway = False  # Flag for gripper halfway position
         self._additional_callbacks: Dict[str, Callable] = {}
 
         # Keyboard listener
@@ -369,6 +370,10 @@ class ZMQSO101Leader(Device):
                 if "N" in self._additional_callbacks:
                     self._additional_callbacks["N"]()
                 print("Reset (task success)")
+            elif key.char == "p":
+                # Toggle gripper halfway position
+                self._gripper_halfway = not self._gripper_halfway
+                print(f"Gripper halfway mode: {'ON' if self._gripper_halfway else 'OFF'}")
         except AttributeError:
             # Non-printable/special keys
             pass
@@ -390,10 +395,20 @@ class ZMQSO101Leader(Device):
             else:
                 return self._joint_state_rad.copy()
 
+        # Get the current state
+        state = self._joint_state_rad.copy()
+        
+        # Override gripper position if halfway mode is active
+        if self._gripper_halfway:
+            # Set gripper to halfway position (pi/4 radians = 45 degrees)
+            state["gripper"] = np.pi / 4
+        else: 
+            state["gripper"] = np.pi / 2 
+        
         if as_degrees:
-            return {name: radians_to_degrees(val) for name, val in self._joint_state_rad.items()}
+            return {name: radians_to_degrees(val) for name, val in state.items()}
         else:
-            return self._joint_state_rad.copy()
+            return state
 
     def input2action(self, output_degrees: bool = True) -> Dict:
         """
