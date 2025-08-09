@@ -7,7 +7,10 @@
 Main data generation script.
 """
 
+"""
+python scripts/imitation_learning/isaaclab_mimic/generate_dataset.py --task=LeIsaac-SO101-PickOrange-Mimic-v0 --device cpu --num_envs 10 --generation_num_trials 10 --input_file scripts/datasets/annotated_dataset.hdf5 --output_file ./datasets/generated_dataset_small.hdf5 --enable_cameras
 
+"""
 """Launch Isaac Sim Simulator first."""
 
 import argparse
@@ -67,6 +70,7 @@ import omni
 from isaaclab.envs import ManagerBasedRLMimicEnv
 
 import isaaclab_mimic.envs  # noqa: F401
+import leisaac 
 
 if args_cli.enable_pinocchio:
     import isaaclab_mimic.envs.pinocchio_envs  # noqa: F401
@@ -81,8 +85,8 @@ def main():
 
     # Setup output paths and get env name
     output_dir, output_file_name = setup_output_paths(args_cli.output_file)
-    env_name = args_cli.task or get_env_name_from_dataset(args_cli.input_file)
-
+    # env_name = args_cli.task or get_env_name_from_dataset(args_cli.input_file)
+    env_name = "LeIsaac-SO101-PickOrange-Mimic-v0"
     # Configure environment
     env_cfg, success_term = setup_env_config(
         env_name=env_name,

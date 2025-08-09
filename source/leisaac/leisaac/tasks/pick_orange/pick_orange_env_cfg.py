@@ -175,11 +175,20 @@ class PickOrangeSceneCfg(InteractiveSceneCfg):
 
 from dataclasses import dataclass
 
+from dataclasses import dataclass
+from typing import Tuple, Optional, Callable
+
+
 @dataclass
 class SubtaskConfig:
-    """Configuration for a subtask."""
-    subtask_term_signal: str
-    subtask_term_func: callable = None  # Optional, for auto mode
+    """Configuration for a subtask in MimicGen."""
+    subtask_term_signal: str  # Name of the subtask
+    subtask_term_func: Optional[Callable] = None  # Function to check completion (for auto mode)
+    subtask_term_offset_range: Tuple[int, int] = (0, 0)  # Time window around completion
+    
+    # You might also need these based on MimicGen:
+    subtask_name: Optional[str] = None  # Human-readable name
+    subtask_type: str = "reach"  # Type: "reach", "grasp", "place", etc.
 
 @configclass
 class SubtaskConfigs:
@@ -216,6 +225,46 @@ class EventCfg:
 
     # reset to default scene
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
+
+
+from dataclasses import dataclass, field
+from typing import Dict, Any, Optional
+
+@configclass
+class DatagenCfg:
+    """Configuration for data generation."""
+    
+    # Core generation parameters
+    generation_num_trials: int = 100
+    seed: int = 42
+    
+    # Generation control flags
+    generation_keep_failed: bool = False  # Whether to keep failed episodes
+    generation_trim_final_timesteps: int = 0  # Number of timesteps to trim from end
+    
+    # Noise parameters
+    generation_action_noise: float = 0.0  # Noise to add to actions during generation
+    generation_action_noise_schedule: Optional[str] = None  # Noise schedule (e.g., "linear")
+    
+    # Shape metadata (will be filled automatically)
+    shape_meta: Dict[str, Any] = field(default_factory=dict)
+    
+    # Additional parameters that might be needed
+    generation_horizon: Optional[int] = None  # Max steps per generation attempt
+    generation_num_threads: int = 1  # Number of parallel generation threads
+    generation_interpolation_steps: int = 5  # Steps for trajectory interpolation
+    
+    # Success criteria
+    generation_success_threshold: float = 0.95  # Success rate threshold
+    generation_max_attempts: int = 10  # Max attempts per trial
+    
+    # Data filtering
+    generation_filter_key: Optional[str] = None  # Key for filtering episodes
+    generation_select_src_per_subtask: bool = True  # Select source per subtask
+    
+    # Trajectory parameters
+    generation_waypoint_step: int = 5  # Steps between waypoints
+    generation_trajectory_type: str = "linear"  # Type of trajectory interpolation
 
 
 @configclass
@@ -282,10 +331,18 @@ class PickOrangeEnvCfg(ManagerBasedRLEnvCfg):
         # Add subtask configuration
     subtask_configs = {
         "eef": [
-            SubtaskConfig(subtask_term_signal="pick_cube"),
-            SubtaskConfig(subtask_term_signal="task_complete"),
+            SubtaskConfig(
+                subtask_term_signal="pick_cube",
+                subtask_term_offset_range=(-10, 10)  # 10 steps before/after pick
+            ),
+            SubtaskConfig(
+                subtask_term_signal="task_complete", 
+                subtask_term_offset_range=(0, 0)  # No offset for final task
+            ),
         ]
     }
+    datagen_config: DatagenCfg = DatagenCfg()
+
 
     def __post_init__(self) -> None:
         super().__post_init__()
