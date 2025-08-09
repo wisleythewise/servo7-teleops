@@ -387,7 +387,7 @@ class ZMQSO101Leader(Device):
         Returns the current joint state.
           - Internally stored in radians.
           - Returns degrees by default (as_degrees=True).
-        If not initialized yet, returns zeros.
+        If not initialized yet, r2eturns zeros.
         """
         if not self._initialized:
             if as_degrees:
