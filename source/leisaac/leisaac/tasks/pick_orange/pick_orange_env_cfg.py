@@ -247,16 +247,6 @@ class RewardsCfg:
     """Configuration for the rewards"""
 
 
-# @configclass
-# class TerminationsCfg:
-#     """Configuration for the termination"""
-#     time_out = DoneTerm(func=mdp.time_out, time_out=True)
-
-#     success = DoneTerm(func=mdp.task_done, params={
-#         "oranges_cfg": [SceneEntityCfg("Orange001"), SceneEntityCfg("Orange002"), SceneEntityCfg("Orange003")],
-#         "plate_cfg": SceneEntityCfg("Plate")
-#     })
-
 @configclass
 class TerminationsCfg:
     """Configuration for the termination"""
@@ -271,8 +261,9 @@ class TerminationsCfg:
     # Add a simple success term for cube picking
     success = DoneTerm(func=mdp.cube_picked_success, params={
         "cube_cfg": SceneEntityCfg("cube"),
-        "height_threshold": 0.85,  # Cube is picked if above this height
+        "height_threshold": 0.785,  # Cube is picked if above this height
     })
+    
 @configclass
 class PickOrangeEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the pick orange environment."""

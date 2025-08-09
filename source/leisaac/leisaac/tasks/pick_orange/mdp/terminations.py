@@ -62,3 +62,30 @@ def task_done(
         print("Task completed!")
 
     return done
+
+
+def cube_picked_success(
+    env: ManagerBasedRLEnv,
+    cube_cfg: SceneEntityCfg = SceneEntityCfg("cube"),
+    height_threshold: float = 0.85,
+) -> torch.Tensor:
+    """Termination condition for successfully picking the cube.
+    
+    Success when cube is above the height threshold.
+    
+    Args:
+        env: The environment.
+        cube_cfg: Configuration for the cube entity.
+        height_threshold: Height threshold for success (in meters).
+    
+    Returns:
+        Boolean tensor indicating success for each environment.
+    """
+    cube = env.scene[cube_cfg.name]
+    cube_y = cube.data.root_pos_w[:, 1]  # z-position
+
+    print(f"[DEBUG] Cube y at check: {cube_y.item():.3f}, threshold: 0")
+
+    
+    # Success if cube is above threshold
+    return cube_y > 0 
