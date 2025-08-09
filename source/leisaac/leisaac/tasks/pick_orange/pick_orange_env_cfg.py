@@ -335,10 +335,6 @@ class PickOrangeEnvCfg(ManagerBasedRLEnvCfg):
                 subtask_term_signal="pick_cube",
                 subtask_term_offset_range=(-10, 10)  # 10 steps before/after pick
             ),
-            SubtaskConfig(
-                subtask_term_signal="task_complete", 
-                subtask_term_offset_range=(0, 0)  # No offset for final task
-            ),
         ]
     }
     datagen_config: DatagenCfg = DatagenCfg()

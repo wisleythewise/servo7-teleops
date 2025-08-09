@@ -48,6 +48,29 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
         
         return object_poses
     
+    def actions_to_gripper_actions(self, actions):
+        """Extract gripper actions from the full action vector.
+        
+        Args:
+            actions: Full action tensor of shape (num_envs, action_dim) or (num_steps, num_envs, action_dim)
+        
+        Returns:
+            Gripper actions tensor with same batch dimensions but only gripper action
+        """
+        # Your action space has 5 arm joints + 1 gripper joint = 6 total
+        # Gripper is the last action dimension
+        
+        if actions.dim() == 2:
+            # Shape: (num_envs, action_dim)
+            # Return just the last column (gripper)
+            return actions[:, -1:].clone()  # Shape: (num_envs, 1)
+        elif actions.dim() == 3:
+            # Shape: (num_steps, num_envs, action_dim) 
+            # Return just the last action dimension
+            return actions[:, :, -1:].clone()  # Shape: (num_steps, num_envs, 1)
+        else:
+            raise ValueError(f"Unexpected action shape: {actions.shape}")
+
     def action_to_target_eef_pose(self, action):
         """Convert action to target end-effector pose.
         
