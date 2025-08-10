@@ -84,7 +84,7 @@ def cube_picked_success(
     cube = env.scene[cube_cfg.name]
     cube_y = cube.data.root_pos_w[:, 1]  # z-position
 
-    print(f"[DEBUG] Cube y at check: {cube_y.item():.3f}, threshold: 0")
+    # print(f"[DEBUG] Cube y at check: {cube_y.item():.3f}, threshold: 0")
 
     
     # Success if cube is above threshold
