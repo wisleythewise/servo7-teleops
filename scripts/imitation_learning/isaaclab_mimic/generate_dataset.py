@@ -8,7 +8,7 @@ Main data generation script.
 """
 
 """
-python scripts/imitation_learning/isaaclab_mimic/generate_dataset.py --task=LeIsaac-SO101-PickOrange-Mimic-v0 --device cpu --num_envs 10 --generation_num_trials 10 --input_file scripts/datasets/single_annotated.hdf5 --output_file ./datasets/single_generated.hdf5 --enable_cameras
+python scripts/imitation_learning/isaaclab_mimic/generate_dataset.py --task=LeIsaac-SO101-PickOrange-Mimic-v0 --device cpu --num_envs 10 --generation_num_trials 10 --input_file scripts/datasets/import_annotated.hdf5 --output_file ./datasets/import_generated.hdf5 --enable_cameras
 
 """
 """Launch Isaac Sim Simulator first."""
