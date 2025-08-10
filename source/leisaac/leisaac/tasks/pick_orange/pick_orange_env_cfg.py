@@ -275,7 +275,7 @@ class PickOrangeEnvCfg(ManagerBasedRLEnvCfg):
         "eef": [
             SubTaskConfig(
                 subtask_term_signal="pick_cube",
-                subtask_term_offset_range=(-10, 10),
+                subtask_term_offset_range=(0, 0),
                 object_ref="cube",  # Add this - it's required by SubTaskConfig
             ),
         ]
