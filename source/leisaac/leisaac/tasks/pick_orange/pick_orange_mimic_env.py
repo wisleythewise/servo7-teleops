@@ -84,8 +84,106 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
         
         print(f"[INFO] PyBullet IK initialized with arm joints: {self.pb_arm_joint_ids}")
         
+
+    def target_eef_pose_to_action(
+        self,
+        target_eef_pose_dict: dict,
+        gripper_action_dict: dict,
+        action_noise_dict: dict | None = None,
+        env_id: int = 0,
+    ) -> torch.Tensor:
+        """Convert target EE pose to joint positions - TESTING COORDINATE SYSTEMS."""
+        eef_name = "eef"
+        
+        # Get target pose from MimicGen
+        target_eef_pose = target_eef_pose_dict[eef_name]
+        target_pos_raw, target_rot = PoseUtils.unmake_pose(target_eef_pose)
+        
+        if target_pos_raw.dim() > 1:
+            target_pos_raw = target_pos_raw.squeeze(0)
+        
+        # TEST: Is it already relative or is it world coordinates?
+        env_origin = self.scene.env_origins[env_id]
+        
+        print(f"\n[COORDINATE TEST]")
+        print(f"  Env {env_id} origin: {env_origin.cpu().numpy()}")
+        print(f"  Target from MimicGen: {target_pos_raw.cpu().numpy()}")
+        
+        # Option 1: Assume it's already relative (DON'T subtract origin)
+        target_pos_relative = target_pos_raw
+        
+        # Option 2: Assume it's world (DO subtract origin) 
+        target_pos_world_adjusted = target_pos_raw - env_origin
+        
+        # Get current pose (already relative)
+        curr_pose = self.get_robot_eef_pose(eef_name, env_ids=[env_id])[0]
+        curr_pos, _ = PoseUtils.unmake_pose(curr_pose)
+        if curr_pos.dim() > 1:
+            curr_pos = curr_pos.squeeze(0)
+        
+        print(f"  Current EE (relative): {curr_pos.cpu().numpy()}")
+        
+        # Check which makes more sense
+        movement_if_relative = target_pos_relative - curr_pos
+        movement_if_world = target_pos_world_adjusted - curr_pos
+        
+        dist_if_relative = torch.norm(movement_if_relative).item()
+        dist_if_world = torch.norm(movement_if_world).item()
+        
+        print(f"\n  If target is RELATIVE:")
+        print(f"    Movement: {movement_if_relative.cpu().numpy()}")
+        print(f"    Distance: {dist_if_relative*1000:.1f}mm")
+        
+        print(f"\n  If target is WORLD:")
+        print(f"    Movement: {movement_if_world.cpu().numpy()}")  
+        print(f"    Distance: {dist_if_world*1000:.1f}mm")
+        
+        # USE THE ONE THAT MAKES SENSE (smaller movement)
+        if dist_if_relative < 1.0:  # Less than 1 meter
+            print(f"\n  -> Using RELATIVE interpretation (makes more sense)")
+            target_pos = target_pos_relative
+        else:
+            print(f"\n  -> Movement too large, something is wrong!")
+            # Try using relative anyway
+            target_pos = target_pos_relative
+        
+        # Continue with IK
+        robot = self.scene["robot"]
+        current_joints = robot.data.joint_pos[env_id, :5].cpu().numpy()
+        
+        target_pos_np = target_pos.cpu().numpy()
+        target_pos_list = target_pos_np.tolist()
+        
+        # Get quaternion
+        if target_rot.dim() == 2:
+            target_quat = PoseUtils.quat_from_matrix(target_rot.unsqueeze(0))[0]
+        else:
+            target_quat = PoseUtils.quat_from_matrix(target_rot)[0] if target_rot.shape[0] == 1 else PoseUtils.quat_from_matrix(target_rot)
+        
+        if target_quat.dim() > 0:
+            target_quat = target_quat.reshape(4)
+        target_quat_np = target_quat.cpu().numpy()
+        pb_quat = [float(target_quat_np[1]), float(target_quat_np[2]), 
+                float(target_quat_np[3]), float(target_quat_np[0])]
+        
+        # Solve IK
+        solution = self._solve_pybullet_ik(target_pos_list, pb_quat, current_joints)
+        
+        if solution is None:
+            print("[IK] Failed - returning current joints")
+            solution = current_joints
+        
+        target_joints = torch.tensor(solution, device=self.device, dtype=torch.float32)
+        
+        # Add gripper
+        gripper_action = gripper_action_dict[eef_name]
+        action = torch.cat([target_joints, gripper_action], dim=0)
+        
+        return action
+
+
     def _solve_pybullet_ik(self, target_pos, target_quat, current_joints=None):
-        """Solve IK using PyBullet with coordinate transformation."""
+        """Solve IK using PyBullet - POSITION ONLY VERSION."""
         
         # Ensure target_pos is 1D numpy array
         if isinstance(target_pos, list):
@@ -93,17 +191,18 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
         if target_pos.ndim > 1:
             target_pos = target_pos.flatten()
         
-        # Coordinate transformation from IsaacSim to PyBullet
-        isaac_ee_home = self.isaac_ee_home  # Now this is 1D
+        # Get coordinate systems
+        isaac_ee_home = self.isaac_ee_home
         pybullet_ee_home = np.array([0.02, -0.30, 0.27])
         
-        # Transform the target position
+        # Calculate offset from home in Isaac space
         offset_from_home = target_pos - isaac_ee_home
+        
+        # Apply transformation (direct mapping for now)
         target_pos_pb = pybullet_ee_home + offset_from_home
         
-        print(f"[DEBUG] Isaac target: {target_pos}")
-        print(f"[DEBUG] Offset from home: {offset_from_home}")
-        print(f"[DEBUG] PyBullet target: {target_pos_pb}")
+        print(f"[IK] Target: Isaac={target_pos}, PyBullet={target_pos_pb}")
+        print(f"[IK] Movement: {np.linalg.norm(offset_from_home)*1000:.1f}mm")
         
         # Set current joint state if provided
         if current_joints is not None:
@@ -111,30 +210,33 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
                 p.resetJointState(self.pb_robot, self.pb_arm_joint_ids[i], 
                                 joint_pos, physicsClientId=self.pb_client)
         
-        # Try IK with multiple parameter sets
+        # Get current EE orientation to maintain it
+        ee_state = p.getLinkState(self.pb_robot, self.pb_ee_link_id, 
+                                physicsClientId=self.pb_client)
+        current_quat = ee_state[1]  # Use current orientation instead of target
+        
+        # Try IK with position only (ignoring target orientation)
         best_solution = None
         best_error = float('inf')
         
         param_sets = [
             {'maxNumIterations': 100, 'residualThreshold': 0.001},
-            {'maxNumIterations': 200, 'residualThreshold': 0.0001},
-            {'maxNumIterations': 500, 'residualThreshold': 0.00001},
+            {'maxNumIterations': 500, 'residualThreshold': 0.0001},
         ]
         
         for params in param_sets:
-            # Make sure target_pos_pb is a list or 1D array for PyBullet
             target_pos_list = target_pos_pb.tolist() if isinstance(target_pos_pb, np.ndarray) else list(target_pos_pb)
             
+            # Use CURRENT orientation, not target
             ik_solution = p.calculateInverseKinematics(
                 self.pb_robot,
                 self.pb_ee_link_id,
-                target_pos_list,  # Pass as list
-                target_quat,
+                target_pos_list,
+                current_quat,  # IGNORING target_quat, using current
                 **params,
                 physicsClientId=self.pb_client
             )
             
-            # Extract arm joint solutions
             arm_solution = [ik_solution[i] for i in self.pb_arm_joint_ids]
             
             # Verify solution
@@ -151,119 +253,17 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
                 best_error = error
                 best_solution = arm_solution
                 
-            # Good enough?
             if error < 0.005:  # 5mm threshold
                 print(f"[SUCCESS] IK converged with {best_error*1000:.1f}mm error")
                 return np.array(arm_solution)
         
         # Return best solution if reasonable
-        if best_error < 0.05:  # 5cm threshold
-            print(f"[WARNING] IK solution has {best_error*1000:.1f}mm error")
+        if best_error < 0.01:  # 10mm threshold
+            print(f"[SUCCESS] Position-only IK with {best_error*1000:.1f}mm error")
             return np.array(best_solution)
         
-        print(f"[ERROR] IK failed with {best_error:.3f}m error")
+        print(f"[FAILED] IK failed with {best_error:.3f}m error")
         return None
-
-    def target_eef_pose_to_action(
-        self,
-        target_eef_pose_dict: dict,
-        gripper_action_dict: dict,
-        action_noise_dict: dict | None = None,
-        env_id: int = 0,
-    ) -> torch.Tensor:
-        """Convert target EE pose to joint positions using PyBullet IK.
-        
-        Args:
-            target_eef_pose_dict: Dict with eef_name -> 4x4 target pose matrix
-            gripper_action_dict: Dict with eef_name -> gripper action
-            action_noise_dict: Optional noise parameters
-            env_id: Environment index
-            
-        Returns:
-            Action tensor compatible with env.step() - joint positions
-        """
-        eef_name = "eef"
-        
-        # Get target pose
-        target_eef_pose = target_eef_pose_dict[eef_name]
-        target_pos, target_rot = PoseUtils.unmake_pose(target_eef_pose)
-        
-        # IMPORTANT: Flatten position from (1, 3) to (3,)
-        if target_pos.dim() > 1:
-            target_pos = target_pos.squeeze(0)
-        
-        # Convert to numpy for PyBullet
-        target_pos_np = target_pos.cpu().numpy()
-        
-        # Convert rotation matrix to quaternion
-        if target_rot.dim() == 2 and target_rot.shape == (3, 3):
-            # Single rotation matrix
-            target_quat = PoseUtils.quat_from_matrix(target_rot.unsqueeze(0))[0]
-        elif target_rot.dim() == 3 and target_rot.shape[0] == 1:
-            # Batched with single element
-            target_quat = PoseUtils.quat_from_matrix(target_rot)[0]
-        elif target_rot.dim() == 3:
-            # Multiple rotations, take the env_id one
-            target_quat = PoseUtils.quat_from_matrix(target_rot)[env_id]
-        else:
-            # Try to handle it anyway
-            if target_rot.numel() == 9:
-                target_rot = target_rot.reshape(1, 3, 3)
-            target_quat = PoseUtils.quat_from_matrix(target_rot)
-            if target_quat.dim() > 1:
-                target_quat = target_quat.squeeze()
-        
-        # Make sure target_quat is 1D with 4 elements
-        if target_quat.numel() == 4:
-            target_quat = target_quat.reshape(4)
-        
-        target_quat_np = target_quat.cpu().numpy()
-        
-        # Convert quaternion from IsaacLab [w,x,y,z] to PyBullet [x,y,z,w]
-        pb_quat = [float(target_quat_np[1]), float(target_quat_np[2]), 
-                float(target_quat_np[3]), float(target_quat_np[0])]
-        
-        # Get current joint positions
-        robot = self.scene["robot"]
-        current_joints = robot.data.joint_pos[env_id, :5].cpu().numpy()
-        
-        # Ensure target_pos_np is a flat list/array for PyBullet
-        target_pos_list = target_pos_np.tolist() if isinstance(target_pos_np, np.ndarray) else list(target_pos_np)
-        
-        # Solve IK using PyBullet
-        solution = self._solve_pybullet_ik(target_pos_list, pb_quat, current_joints)
-        
-        if solution is None:
-            # Fallback: return current joints if IK fails
-            print(f"[WARNING] IK failed, returning current joints")
-            solution = current_joints
-        
-        # Convert back to torch tensor
-        target_joints = torch.tensor(solution, device=self.device, dtype=torch.float32)
-        
-        # Add noise if specified
-        if action_noise_dict is not None and eef_name in action_noise_dict:
-            noise_scale = action_noise_dict[eef_name]
-            joint_noise = noise_scale * torch.randn_like(target_joints)
-            target_joints = target_joints + joint_noise
-            # Apply joint limits from URDF
-            joint_limits_lower = torch.tensor([-1.92, -1.75, -1.75, -1.66, -2.79], 
-                                            device=self.device)
-            joint_limits_upper = torch.tensor([1.92, 1.75, 1.57, 1.66, 2.79], 
-                                            device=self.device)
-            target_joints = torch.clamp(target_joints, joint_limits_lower, joint_limits_upper)
-        
-        # Get gripper action
-        gripper_action = gripper_action_dict[eef_name]
-        
-        # Combine arm joints with gripper
-        action = torch.cat([target_joints, gripper_action], dim=0)
-        
-        # Debug output
-        print(f"[DEBUG] Target EE pos: {target_pos_list}")
-        print(f"[DEBUG] IK solution joints: {target_joints.cpu().numpy()}")
-        
-        return action
 
     def get_robot_eef_pose(self, eef_name: str, env_ids: Sequence[int] | None = None) -> torch.Tensor:
         """Get current robot end effector pose as 4x4 transformation matrix."""
