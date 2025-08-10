@@ -13,15 +13,7 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
         super().__init__(cfg, render_mode, **kwargs)
         
     def get_robot_eef_pose(self, eef_name: str, env_ids: Sequence[int] | None = None) -> torch.Tensor:
-        """Get current robot end effector pose as 4x4 transformation matrix.
-        
-        Args:
-            eef_name: Name of the end effector (e.g., "eef")
-            env_ids: Environment indices. If None, all envs are considered.
-            
-        Returns:
-            EE pose matrices of shape (len(env_ids), 4, 4)
-        """
+        """Get current robot end effector pose as 4x4 transformation matrix."""
         robot = self.scene["robot"]
         gripper_body_id = robot.find_bodies("gripper")[0]
         
@@ -32,13 +24,17 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
         gripper_pos = robot.data.body_pos_w[env_ids, gripper_body_id]  # (N, 3)
         gripper_quat = robot.data.body_quat_w[env_ids, gripper_body_id]  # (N, 4)
         
+        # IMPORTANT: Subtract environment origins to get relative positions!
+        env_origins = self.scene.env_origins[env_ids]
+        gripper_pos = gripper_pos - env_origins
+        
         # Convert to 4x4 transformation matrix
         pose_matrix = PoseUtils.make_pose(
             gripper_pos, 
             PoseUtils.matrix_from_quat(gripper_quat)
         )
         
-        return pose_matrix  # Shape: (N, 4, 4)
+        return pose_matrix 
     
     def compute_jacobian_based_ik(self, target_ee_pos, target_ee_rot, env_ids=None):
         """Compute joint positions using Jacobian-based inverse kinematics.
@@ -139,7 +135,7 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
             jacobian[i, 3:6, :] = 0.05 * torch.randn(3, 5, device=self.device)
             
         return jacobian
-    
+
     def target_eef_pose_to_action(
         self,
         target_eef_pose_dict: dict,
@@ -147,44 +143,95 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
         action_noise_dict: dict | None = None,
         env_id: int = 0,
     ) -> torch.Tensor:
-        """Convert target EE pose to joint position action using IK.
+        """TESTING: Skip IK and just send fixed joint positions."""
         
-        Args:
-            target_eef_pose_dict: Dict with eef_name -> 4x4 target pose matrix
-            gripper_action_dict: Dict with eef_name -> gripper action
-            action_noise_dict: Optional noise parameters
-            env_id: Environment index
-            
-        Returns:
-            Action tensor compatible with env.step() - joint positions
-        """
-        eef_name = "eef"
+        # Ignore the target_eef_pose completely for now
+        # Just create some joint positions that should make the robot move
         
-        # Get target pose
-        target_eef_pose = target_eef_pose_dict[eef_name]
-        target_pos, target_rot = PoseUtils.unmake_pose(target_eef_pose)
+        # Get current joint positions to see what they are
+        robot = self.scene["robot"]
+        current_joints = robot.data.joint_pos[env_id, :5]
+        print(f"[DEBUG] Current joints: {current_joints.cpu().numpy()}")
         
-        # Compute IK to get joint positions
-        target_joint_pos = self.compute_jacobian_based_ik(
-            target_pos.unsqueeze(0), 
-            target_rot.unsqueeze(0), 
-            env_ids=[env_id]
-        )[0]  # Get first (and only) result
+        # Create a simple test action - move first joint by 0.5 radians
+        test_joints = current_joints.clone()
+        test_joints[0] += 0.5  # Move shoulder_pan
+        test_joints[1] += 0.2  # Move shoulder_lift a bit
         
-        # Get gripper action
-        gripper_action = gripper_action_dict[eef_name]
+        # Add gripper (keep it open for now)
+        action = torch.cat([test_joints, torch.tensor([0.0], device=self.device)], dim=0)
         
-        # Add noise if specified
-        if action_noise_dict is not None and eef_name in action_noise_dict:
-            noise_scale = action_noise_dict[eef_name]
-            joint_noise = noise_scale * torch.randn_like(target_joint_pos)
-            target_joint_pos = target_joint_pos + joint_noise
-            target_joint_pos = torch.clamp(target_joint_pos, -3.14, 3.14)
-        
-        # Combine arm joints with gripper
-        action = torch.cat([target_joint_pos, gripper_action], dim=0)
+        print(f"[DEBUG] Sending test action: {action.cpu().numpy()}")
         
         return action
+
+
+    # def target_eef_pose_to_action(
+    #     self,
+    #     target_eef_pose_dict: dict,
+    #     gripper_action_dict: dict,
+    #     action_noise_dict: dict | None = None,
+    #     env_id: int = 0,
+    # ) -> torch.Tensor:
+    #     """Convert target EE pose to joint position action using IK.
+        
+    #     Args:
+    #         target_eef_pose_dict: Dict with eef_name -> 4x4 target pose matrix
+    #         gripper_action_dict: Dict with eef_name -> gripper action
+    #         action_noise_dict: Optional noise parameters
+    #         env_id: Environment index
+            
+    #     Returns:
+    #         Action tensor compatible with env.step() - joint positions
+    #     """
+    #     eef_name = "eef"
+        
+    #     # Get target pose
+    #     target_eef_pose = target_eef_pose_dict[eef_name]
+    #     target_pos, target_rot = PoseUtils.unmake_pose(target_eef_pose)
+        
+    #     # Compute IK to get joint positions
+    #     target_joint_pos = self.compute_jacobian_based_ik(
+    #         target_pos.unsqueeze(0), 
+    #         target_rot.unsqueeze(0), 
+    #         env_ids=[env_id]
+    #     )[0]  # Get first (and only) result
+        
+    #     # Get gripper action
+    #     gripper_action = gripper_action_dict[eef_name]
+
+        
+    #     ############## Debug 
+    #     target_eef_pose = target_eef_pose_dict[eef_name]
+    #     target_pos, target_rot = PoseUtils.unmake_pose(target_eef_pose)
+    
+    #     # DEBUG: Check target vs current
+    #     curr_pose = self.get_robot_eef_pose(eef_name, env_ids=[env_id])[0]
+    #     curr_pos, curr_rot = PoseUtils.unmake_pose(curr_pose)
+    
+
+    #     print(f"[DEBUG] Current EE pos: {curr_pos.cpu().numpy()}")
+    #     print(f"[DEBUG] Target EE pos: {target_pos.cpu().numpy()}")
+    #     print(f"[DEBUG] Position error: {(target_pos - curr_pos).cpu().numpy()}")
+    
+    #     ############## Debug 
+        
+    #     # Add noise if specified
+    #     if action_noise_dict is not None and eef_name in action_noise_dict:
+    #         noise_scale = action_noise_dict[eef_name]
+    #         joint_noise = noise_scale * torch.randn_like(target_joint_pos)
+    #         target_joint_pos = target_joint_pos + joint_noise
+    #         target_joint_pos = torch.clamp(target_joint_pos, -3.14, 3.14)
+        
+    #     # Combine arm joints with gripper
+    #     action = torch.cat([target_joint_pos, gripper_action], dim=0)
+
+    #     ##### Debug
+    #     print(f"[DEBUG] Generated action: {action.cpu().numpy()}")
+    #     ##### Debug
+
+        
+    #     return action
     
     def action_to_target_eef_pose(self, action: torch.Tensor) -> dict[str, torch.Tensor]:
         """Convert joint position action to target EE pose using FK.
@@ -248,14 +295,7 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
         return {"eef": gripper_actions}
     
     def get_object_poses(self, env_ids: Sequence[int] | None = None):
-        """Get object poses as 4x4 transformation matrices.
-        
-        Args:
-            env_ids: Environment indices. If None, all envs.
-            
-        Returns:
-            Dictionary mapping object names to 4x4 pose matrices
-        """
+        """Get object poses as 4x4 transformation matrices."""
         if env_ids is None:
             env_ids = slice(None)
         
@@ -264,6 +304,10 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
         cube_pos = cube.data.root_pos_w[env_ids]  # (N, 3)
         cube_quat = cube.data.root_quat_w[env_ids]  # (N, 4)
         
+        # Subtract environment origins for relative positions!
+        env_origins = self.scene.env_origins[env_ids]
+        cube_pos = cube_pos - env_origins
+        
         # Convert to 4x4 matrix
         cube_pose_matrix = PoseUtils.make_pose(
             cube_pos,
@@ -271,7 +315,7 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
         )
         
         return {"cube": cube_pose_matrix}
-    
+
     def get_subtask_term_signals(self, env_ids: Sequence[int] | None = None) -> dict[str, torch.Tensor]:
         """Get subtask termination signals.
         
