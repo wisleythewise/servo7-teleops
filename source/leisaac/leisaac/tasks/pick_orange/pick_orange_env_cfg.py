@@ -179,31 +179,6 @@ from dataclasses import dataclass
 from typing import Tuple, Optional, Callable
 
 
-@dataclass
-class SubtaskConfig:
-    """Configuration for a subtask in MimicGen."""
-    subtask_term_signal: str  # Name of the subtask
-    subtask_term_func: Optional[Callable] = None  # Function to check completion (for auto mode)
-    subtask_term_offset_range: Tuple[int, int] = (0, 0)  # Time window around completion
-    
-    # You might also need these based on MimicGen:
-    subtask_name: Optional[str] = None  # Human-readable name
-    subtask_type: str = "reach"  # Type: "reach", "grasp", "place", etc.
-
-@configclass
-class SubtaskConfigs:
-    """Subtask configurations for the pick task."""
-    eef: list = [
-        SubtaskConfig(
-            subtask_term_signal="pick_cube",
-            # No func needed for manual mode
-        ),
-        SubtaskConfig(
-            subtask_term_signal="task_complete",
-            # This is the final subtask (overall success)
-        ),
-    ]
-
 @configclass
 class ActionsCfg:
     """Configuration for the actions."""
@@ -229,43 +204,6 @@ class EventCfg:
 
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional
-
-@configclass
-class DatagenCfg:
-    """Configuration for data generation."""
-    
-    # Core generation parameters
-    generation_num_trials: int = 100
-    seed: int = 42
-    
-    # Generation control flags
-    generation_keep_failed: bool = False  # Whether to keep failed episodes
-    generation_trim_final_timesteps: int = 0  # Number of timesteps to trim from end
-    
-    # Noise parameters
-    generation_action_noise: float = 0.0  # Noise to add to actions during generation
-    generation_action_noise_schedule: Optional[str] = None  # Noise schedule (e.g., "linear")
-    
-    # Shape metadata (will be filled automatically)
-    shape_meta: Dict[str, Any] = field(default_factory=dict)
-    
-    # Additional parameters that might be needed
-    generation_horizon: Optional[int] = None  # Max steps per generation attempt
-    generation_num_threads: int = 1  # Number of parallel generation threads
-    generation_interpolation_steps: int = 5  # Steps for trajectory interpolation
-    
-    # Success criteria
-    generation_success_threshold: float = 0.95  # Success rate threshold
-    generation_max_attempts: int = 10  # Max attempts per trial
-    
-    # Data filtering
-    generation_filter_key: Optional[str] = None  # Key for filtering episodes
-    generation_select_src_per_subtask: bool = True  # Select source per subtask
-    
-    # Trajectory parameters
-    generation_waypoint_step: int = 5  # Steps between waypoints
-    generation_trajectory_type: str = "linear"  # Type of trajectory interpolation
-
 
 @configclass
 class ObservationsCfg:
@@ -312,6 +250,10 @@ class TerminationsCfg:
         "cube_cfg": SceneEntityCfg("cube"),
         "height_threshold": 0.785,  # Cube is picked if above this height
     })
+
+
+from isaaclab.envs import MimicEnvCfg, DataGenConfig, SubTaskConfig
+
     
 @configclass
 class PickOrangeEnvCfg(ManagerBasedRLEnvCfg):
@@ -329,15 +271,18 @@ class PickOrangeEnvCfg(ManagerBasedRLEnvCfg):
     recorders: RecordTerm = RecordTerm()
 
         # Add subtask configuration
-    subtask_configs = {
+    subtask_configs: dict = {
         "eef": [
-            SubtaskConfig(
+            SubTaskConfig(
                 subtask_term_signal="pick_cube",
-                subtask_term_offset_range=(-10, 10)  # 10 steps before/after pick
+                subtask_term_offset_range=(-10, 10),
+                object_ref="cube",  # Add this - it's required by SubTaskConfig
             ),
         ]
     }
-    datagen_config: DatagenCfg = DatagenCfg()
+    datagen_config: DataGenConfig = DataGenConfig()
+
+    task_constraint_configs: list = [] 
 
 
     def __post_init__(self) -> None:

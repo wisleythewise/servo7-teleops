@@ -6,7 +6,7 @@
 """
 Script to add mimic annotations to demos to be used as source demos for mimic dataset generation.
 
-python scripts/imitation_learning/isaaclab_mimic/annotate_demos.py --task=LeIsaac-SO101-PickOrange-Mimic-v0 --input_file scripts/datasets/filtered_data_set.hdf5 --output_file scripts/datasets/annotated_dataset.hdf5 --enable_cameras
+python scripts/imitation_learning/isaaclab_mimic/annotate_demos.py --task=LeIsaac-SO101-PickOrange-Mimic-v0 --input_file scripts/datasets/import.hdf5 --output_file scripts/datasets/import_annotated.hdf5 --enable_cameras
 
 """
 
@@ -222,11 +222,12 @@ def main():
         # Check if subtask_configs exists
         if hasattr(env.cfg, 'subtask_configs'):
             for eef_name, eef_subtask_configs in env.cfg.subtask_configs.items():
-                subtask_term_signal_names[eef_name] = [
-                    subtask_config.subtask_term_signal for subtask_config in eef_subtask_configs
-                ]
-                # no need to annotate the last subtask term signal, so remove it from the list
-                subtask_term_signal_names[eef_name].pop()
+                subtask_term_signal_names[eef_name] = []
+                
+                for subtask_config in eef_subtask_configs:
+                    if subtask_config.subtask_term_signal != "task_complete":
+                        subtask_term_signal_names[eef_name].append(subtask_config.subtask_term_signal)
+            
         else:
             # No subtasks defined - that's okay for simple pick and place
             print("No subtask_configs found in environment - proceeding without subtask annotations")
