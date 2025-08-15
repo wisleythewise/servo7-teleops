@@ -1,4 +1,4 @@
-# Copyright (c) 2024-2025, The Isaac Lab Project Developers.
+# Copyright (c) 2024-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
 # All rights reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -7,10 +7,7 @@
 Main data generation script.
 """
 
-"""
-python scripts/imitation_learning/isaaclab_mimic/generate_dataset.py --task=LeIsaac-SO101-PickOrange-Mimic-v0 --device cuda --num_envs 1 --generation_num_trials 10 --input_file scripts/datasets/5a.hdf5 --output_file ./datasets/5b.hdf5 --enable_cameras
 
-"""
 """Launch Isaac Sim Simulator first."""
 
 import argparse
@@ -70,7 +67,6 @@ import omni
 from isaaclab.envs import ManagerBasedRLMimicEnv
 
 import isaaclab_mimic.envs  # noqa: F401
-import leisaac 
 
 if args_cli.enable_pinocchio:
     import isaaclab_mimic.envs.pinocchio_envs  # noqa: F401
@@ -85,8 +81,11 @@ def main():
 
     # Setup output paths and get env name
     output_dir, output_file_name = setup_output_paths(args_cli.output_file)
-    # env_name = args_cli.task or get_env_name_from_dataset(args_cli.input_file)
-    env_name = "LeIsaac-SO101-PickOrange-Mimic-v0"
+    task_name = args_cli.task
+    if task_name:
+        task_name = args_cli.task.split(":")[-1]
+    env_name = task_name or get_env_name_from_dataset(args_cli.input_file)
+
     # Configure environment
     env_cfg, success_term = setup_env_config(
         env_name=env_name,
@@ -100,47 +99,16 @@ def main():
     # create environment
     env = gym.make(env_name, cfg=env_cfg).unwrapped
 
-    if not isinstance(env, ManagerBasedRLMimicEnv):
-        raise ValueError("The environment should be derived from ManagerBasedRLMimicEnv")
+    test_target = torch.eye(4, device=env.device)
+    test_target[:3, 3] = torch.tensor([0.3, 0.2, 0.5])  # test position
 
-    # check if the mimic API from this environment contains decprecated signatures
-    if "action_noise_dict" not in inspect.signature(env.target_eef_pose_to_action).parameters:
-        omni.log.warn(
-            f'The "noise" parameter in the "{env_name}" environment\'s mimic API "target_eef_pose_to_action", '
-            "is deprecated. Please update the API to take action_noise_dict instead."
-        )
-
-    # set seed for generation
-    random.seed(env.cfg.datagen_config.seed)
-    np.random.seed(env.cfg.datagen_config.seed)
-    torch.manual_seed(env.cfg.datagen_config.seed)
-
-    # reset before starting
-    env.reset()
-
-    # Setup and run async data generation
-    async_components = setup_async_generation(
-        env=env,
-        num_envs=args_cli.num_envs,
-        input_file=args_cli.input_file,
-        success_term=success_term,
-        pause_subtask=args_cli.pause_subtask,
+    action = env.target_eef_pose_to_action(
+        target_eef_pose_dict={"eef": test_target},
+        gripper_action_dict={"eef": torch.tensor([0.0], device=env.device)},
+        env_id=0
     )
-
-    try:
-        asyncio.ensure_future(asyncio.gather(*async_components["tasks"]))
-        env_loop(
-            env,
-            async_components["reset_queue"],
-            async_components["action_queue"],
-            async_components["info_pool"],
-            async_components["event_loop"],
-        )
-    except asyncio.CancelledError:
-        print("Tasks were cancelled.")
-
-
-if __name__ == "__main__":
+    print(f"[TEST] IK solution: {action}")
+    
     try:
         main()
     except KeyboardInterrupt:

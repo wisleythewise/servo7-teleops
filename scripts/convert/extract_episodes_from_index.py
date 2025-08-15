@@ -1,13 +1,33 @@
 #!/usr/bin/env python3
 """
-Script to extract a specific episode from an HDF5 dataset.
-Usage: python extract_episode.py --input path/to/dataset.hdf5 --episode-index 0 --output extracted_episode.hdf5
+Script to extract all episodes from a specified index onwards from an HDF5 dataset.
+Usage: python extract_episodes_from_index.py --input path/to/dataset.hdf5 --start-index 2 --output filtered_dataset.hdf5
 """
 
 import argparse
 import h5py
-import numpy as np
+import json
 import os
+
+def copy_hdf5_structure(source_item, dest_group, name):
+    """Recursively copy HDF5 structure from source to destination."""
+    if isinstance(source_item, h5py.Group):
+        # Create group and copy attributes
+        new_group = dest_group.create_group(name)
+        for attr_name, attr_value in source_item.attrs.items():
+            new_group.attrs[attr_name] = attr_value
+        
+        # Recursively copy contents
+        for key in source_item.keys():
+            copy_hdf5_structure(source_item[key], new_group, key)
+    
+    elif isinstance(source_item, h5py.Dataset):
+        # Copy dataset
+        dest_group.create_dataset(name, data=source_item[()])
+        
+        # Copy attributes
+        for attr_name, attr_value in source_item.attrs.items():
+            dest_group[name].attrs[attr_name] = attr_value
 
 def list_episodes(file_path):
     """List all available episodes in the dataset."""
@@ -36,29 +56,9 @@ def list_episodes(file_path):
         
         return episodes
 
-def copy_hdf5_structure(source_item, dest_group, name):
-    """Recursively copy HDF5 structure from source to destination."""
-    if isinstance(source_item, h5py.Group):
-        # Create group and copy attributes
-        new_group = dest_group.create_group(name)
-        for attr_name, attr_value in source_item.attrs.items():
-            new_group.attrs[attr_name] = attr_value
-        
-        # Recursively copy contents
-        for key in source_item.keys():
-            copy_hdf5_structure(source_item[key], new_group, key)
-    
-    elif isinstance(source_item, h5py.Dataset):
-        # Copy dataset
-        dest_group.create_dataset(name, data=source_item[()])
-        
-        # Copy attributes
-        for attr_name, attr_value in source_item.attrs.items():
-            dest_group[name].attrs[attr_name] = attr_value
-
-def extract_episode(input_file, episode_index, output_file, add_metadata=True):
-    """Extract a specific episode from the dataset."""
-    print(f"Extracting episode {episode_index} from {input_file} to {output_file}")
+def extract_episodes_from_index(input_file, start_index, output_file, add_metadata=True):
+    """Extract all episodes from start_index onwards."""
+    print(f"Extracting episodes from index {start_index} onwards from {input_file} to {output_file}")
     
     with h5py.File(input_file, 'r') as src_f:
         if 'data' not in src_f:
@@ -67,13 +67,12 @@ def extract_episode(input_file, episode_index, output_file, add_metadata=True):
         data_group = src_f['data']
         episodes = sorted(data_group.keys())
         
-        if episode_index >= len(episodes):
-            raise ValueError(f"Episode index {episode_index} out of range. Found {len(episodes)} episodes.")
+        if start_index >= len(episodes):
+            raise ValueError(f"Start index {start_index} out of range. Found {len(episodes)} episodes.")
         
-        episode_key = episodes[episode_index]
-        episode_data = data_group[episode_key]
-        
-        print(f"Extracting episode '{episode_key}'...")
+        # Get episodes to extract
+        episodes_to_extract = episodes[start_index:]
+        print(f"Will extract {len(episodes_to_extract)} episodes: {episodes_to_extract}")
         
         # Create output file
         with h5py.File(output_file, 'w') as dst_f:
@@ -84,13 +83,14 @@ def extract_episode(input_file, episode_index, output_file, add_metadata=True):
             # Create data group
             dst_data = dst_f.create_group('data')
             
-            # Copy the specific episode
-            copy_hdf5_structure(episode_data, dst_data, episode_key)
+            # Copy selected episodes
+            for episode_key in episodes_to_extract:
+                print(f"Copying episode: {episode_key}")
+                episode_data = data_group[episode_key]
+                copy_hdf5_structure(episode_data, dst_data, episode_key)
             
             # Add required metadata if missing (for Isaac Lab compatibility)
             if add_metadata:
-                import json
-                
                 # Check if env_args exists, if not add it
                 if 'env_args' not in dst_data.attrs:
                     env_args = {
@@ -110,7 +110,7 @@ def extract_episode(input_file, episode_index, output_file, add_metadata=True):
                 if 'repository_version' not in dst_data.attrs:
                     dst_data.attrs["repository_version"] = "isaac-lab-1.0.0"
                 if 'num_episodes' not in dst_data.attrs:
-                    dst_data.attrs["num_episodes"] = 1  # Single episode
+                    dst_data.attrs["num_episodes"] = len(episodes_to_extract)
                 
                 print(f"Added Isaac Lab compatibility metadata")
             
@@ -121,38 +121,40 @@ def extract_episode(input_file, episode_index, output_file, add_metadata=True):
                     copy_hdf5_structure(src_f[key], dst_f, key)
         
         # Show what was extracted
-        print(f"\nExtracted episode summary:")
-        print(f"  Episode key: {episode_key}")
+        print(f"\nExtraction summary:")
+        print(f"  Start index: {start_index}")
+        print(f"  Episodes extracted: {len(episodes_to_extract)}")
+        print(f"  Episode keys: {episodes_to_extract}")
         
-        if 'actions' in episode_data:
-            actions_shape = episode_data['actions'].shape
-            print(f"  Actions shape: {actions_shape}")
-        
-        if 'obs' in episode_data:
-            obs_keys = list(episode_data['obs'].keys())
-            print(f"  Observation keys: {obs_keys}")
-            
-            # Show shapes of observations
-            for obs_key in obs_keys:
-                obs_shape = episode_data['obs'][obs_key].shape if hasattr(episode_data['obs'][obs_key], 'shape') else "unknown"
-                print(f"    {obs_key}: {obs_shape}")
-        
-        if 'rewards' in episode_data:
-            rewards_shape = episode_data['rewards'].shape
-            print(f"  Rewards shape: {rewards_shape}")
-        
-        if 'dones' in episode_data:
-            dones_shape = episode_data['dones'].shape
-            print(f"  Dones shape: {dones_shape}")
+        # Show detailed info for each extracted episode
+        with h5py.File(input_file, 'r') as src_f:
+            data_group = src_f['data']
+            for episode_key in episodes_to_extract:
+                episode_data = data_group[episode_key]
+                
+                episode_info = []
+                if 'actions' in episode_data:
+                    actions_shape = episode_data['actions'].shape
+                    episode_info.append(f"actions: {actions_shape}")
+                
+                if 'obs' in episode_data:
+                    obs_keys = list(episode_data['obs'].keys())
+                    episode_info.append(f"obs: {len(obs_keys)} types")
+                
+                if 'states' in episode_data:
+                    episode_info.append("states: included")
+                
+                print(f"    {episode_key}: {', '.join(episode_info)}")
         
         print(f"\nSuccessfully extracted to: {output_file}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Extract a specific episode from HDF5 dataset")
+    parser = argparse.ArgumentParser(description="Extract episodes from specified index onwards from HDF5 dataset")
     parser.add_argument("--input", type=str, required=True, help="Input HDF5 file path")
-    parser.add_argument("--episode-index", type=int, help="Episode index to extract (0-based)")
+    parser.add_argument("--start-index", type=int, help="Start index (inclusive) - extract this episode and all following ones")
     parser.add_argument("--output", type=str, help="Output HDF5 file path")
     parser.add_argument("--list", action="store_true", help="List all episodes and exit")
+    parser.add_argument("--no-metadata", action="store_true", help="Don't add Isaac Lab metadata")
     
     args = parser.parse_args()
     
@@ -166,20 +168,27 @@ def main():
     if args.list:
         return
     
-    if args.episode_index is None:
-        print("\nPlease specify --episode-index to extract an episode")
+    if args.start_index is None:
+        print("\nPlease specify --start-index to extract episodes")
         return
     
     if args.output is None:
         # Generate default output name
         base_name = os.path.splitext(os.path.basename(args.input))[0]
-        args.output = f"{base_name}_episode_{args.episode_index}.hdf5"
+        args.output = f"{base_name}_from_index_{args.start_index}.hdf5"
         print(f"Using default output name: {args.output}")
     
     try:
-        extract_episode(args.input, args.episode_index, args.output, add_metadata=True)
+        extract_episodes_from_index(
+            args.input, 
+            args.start_index, 
+            args.output, 
+            add_metadata=not args.no_metadata
+        )
     except Exception as e:
-        print(f"Error extracting episode: {e}")
+        print(f"Error extracting episodes: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main()

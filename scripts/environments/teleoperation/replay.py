@@ -40,7 +40,7 @@ import leisaac  # noqa: F401
 from leisaac.utils.env_utils import get_task_type
 
 """
-python scripts/environments/teleoperation/replay.py --task=LeIsaac-SO101-PickOrange-v0 --num_envs=1 --device=cpu --enable_cameras --dataset_file=./datasets/first_real_data_set.hdf5 --episode_index=2
+python scripts/environments/teleoperation/replay.py --task=LeIsaac-SO101-PickOrange-v0 --num_envs=1 --device=cuda --enable_cameras --dataset_file=./datasets/1.hdf5 --episode_index=0
 
 """
 class RateLimiter:
