@@ -83,7 +83,7 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
             
             # Configure the controller
             self.diff_ik_cfg = DifferentialIKControllerCfg(
-                command_type="position",        # Control both position and orientation
+                command_type="pose",        # Control both position and orientation
                 use_relative_mode=False,    # Use absolute pose commands
                 ik_method="dls",            # Use damped least-squares (most robust)
                 ik_params={
@@ -191,16 +191,12 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
         # Check if this is needed by examining the quaternion values
         # A valid quaternion should have norm = 1 and w component typically > 0.5 for small rotations
         
-        # Debug: Print quaternion format check
-        if env_id == 0:  # Only print once
-            print(f"[DEBUG] Target quat shape: {target_quat.shape}")
-            print(f"[DEBUG] Target quat sample: {target_quat[0].cpu().numpy()}")
-            print(f"[DEBUG] Current quat sample: {current_ee_quat_b[0].cpu().numpy()}")
         
         # Set the TARGET command (in base frame)
         command = torch.cat([target_pos, target_quat], dim=-1)
         self.diff_ik_controller.set_command(
-            command=target_pos,           # Only position (3D)
+            command=command,           # Only position (3D)
+            ee_pos=current_ee_pos_b,    # Pass current orientation to maintain it
             ee_quat=current_ee_quat_b    # Pass current orientation to maintain it
         )
         # self.diff_ik_controller.set_command(target_pos)
