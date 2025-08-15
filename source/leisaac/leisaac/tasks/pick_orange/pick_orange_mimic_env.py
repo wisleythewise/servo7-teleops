@@ -83,7 +83,7 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
             
             # Configure the controller
             self.diff_ik_cfg = DifferentialIKControllerCfg(
-                command_type="pose",        # Control both position and orientation
+                command_type="position",        # Control both position and orientation
                 use_relative_mode=False,    # Use absolute pose commands
                 ik_method="dls",            # Use damped least-squares (most robust)
                 ik_params={
@@ -116,107 +116,6 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
             self.use_diff_ik = False
             raise
 
-    def _solve_diff_ik(self, target_pos_b, target_quat_b, jacobian, current_joints, env_id=0):
-        """
-        Solve IK using DifferentialIKController.
-        
-        Args:
-            target_pos_b: Target position in base frame
-            target_quat_b: Target quaternion in base frame (w, x, y, z)
-            jacobian: Jacobian matrix from PhysX
-            current_joints: Current joint positions
-            env_id: Environment ID for debugging
-            
-        Returns:
-            Joint positions solution or None if failed
-        """
-        try:
-            print(f"\n[DEBUG] Solving IK with DifferentialIKController for env {env_id}")
-            
-            # Convert inputs to tensors if needed
-            if isinstance(target_pos_b, np.ndarray):
-                target_pos_b = torch.tensor(target_pos_b, device=self.device, dtype=torch.float32)
-            if isinstance(target_quat_b, np.ndarray):
-                target_quat_b = torch.tensor(target_quat_b, device=self.device, dtype=torch.float32)
-            if isinstance(current_joints, np.ndarray):
-                current_joints = torch.tensor(current_joints, device=self.device, dtype=torch.float32)
-                
-            # Ensure correct shapes
-            if target_pos_b.dim() == 1:
-                target_pos_b = target_pos_b.unsqueeze(0)
-            if target_quat_b.dim() == 1:
-                target_quat_b = target_quat_b.unsqueeze(0)
-            if current_joints.dim() == 1:
-                current_joints = current_joints.unsqueeze(0)
-            if jacobian.dim() == 2:
-                jacobian = jacobian.unsqueeze(0)
-                
-            print(f"[DEBUG] Input shapes:")
-            print(f"  - Target position: {target_pos_b.shape} = {target_pos_b.squeeze().cpu().numpy()}")
-            print(f"  - Target quaternion: {target_quat_b.shape} = {target_quat_b.squeeze().cpu().numpy()}")
-            print(f"  - Current joints: {current_joints.shape} = {current_joints.squeeze().cpu().numpy()}")
-            print(f"  - Jacobian shape: {jacobian.shape}")
-            
-            # Set the desired command
-            command = torch.cat([target_pos_b, target_quat_b], dim=-1)
-            self.diff_ik_controller.set_command(command)
-            
-            print(f"[DEBUG] Command set: {command.squeeze().cpu().numpy()}")
-            
-            # Get current EE pose (needed for error computation)
-            # For now, we'll compute it from forward kinematics if needed
-            # This is a simplified version - you might need to adjust based on your robot
-            
-            # Compute IK solution
-            joint_solution = self.diff_ik_controller.compute(
-                ee_pos=target_pos_b,
-                ee_quat=target_quat_b,
-                jacobian=jacobian,
-                joint_pos=current_joints
-            )
-            
-            print(f"[DEBUG] IK solution computed: {joint_solution.squeeze().cpu().numpy()}")
-            
-            # Check for NaN or inf values
-            if torch.isnan(joint_solution).any() or torch.isinf(joint_solution).any():
-                carb.log_warn(f"[WARNING] IK solution contains NaN or Inf values")
-                return None
-                
-            return joint_solution.squeeze().cpu().numpy()
-            
-        except Exception as e:
-            carb.log_error(f"[ERROR] Failed to solve IK with DifferentialIKController")
-            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
-            return None
-
-    def _get_jacobian_for_env(self, env_id=0):
-        """Get Jacobian matrix from PhysX for specific environment."""
-        try:
-            robot = self.scene["robot"]
-            
-            # Get Jacobian from PhysX
-            # Shape: [num_envs, num_bodies, 6, num_joints]
-            all_jacobians = robot.root_physx_view.get_jacobians()
-            
-            # Extract Jacobian for specific environment and end-effector
-            jacobian = all_jacobians[env_id, self.ee_jacobi_idx, :, self.arm_joint_ids]
-            
-            print(f"[DEBUG] Jacobian retrieved from PhysX:")
-            print(f"  - Full Jacobian shape: {all_jacobians.shape}")
-            print(f"  - Extracted Jacobian shape: {jacobian.shape}")
-            print(f"  - Jacobian norm: {torch.norm(jacobian).item():.4f}")
-            
-            # Check for validity
-            if torch.isnan(jacobian).any() or torch.isinf(jacobian).any():
-                carb.log_error(f"[ERROR] Jacobian contains NaN or Inf values!")
-                return None
-                
-            return jacobian
-            
-        except Exception as e:
-            carb.log_error(f"[ERROR] Failed to get Jacobian from PhysX")
-            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
-            return None
         
     # def target_eef_pose_to_action(
     #     self,
@@ -240,7 +139,7 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
         action_noise_dict: dict | None = None,
         env_id: int = 0,
     ) -> torch.Tensor:
-        """Convert target EE pose to joint positions - FIXED VERSION."""
+        """Convert target EE pose to joint positions - CORRECTED VERSION."""
         
         robot = self.scene["robot"]
         num_envs = self.scene.num_envs
@@ -248,17 +147,31 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
         # Get current joints for ALL envs
         current_joints_all = robot.data.joint_pos[:, self.arm_joint_ids]
         
-        # Get CURRENT end-effector poses for ALL envs
-        current_ee_pos = robot.data.body_pos_w[:, self.jaw_body_id]  # Current EE positions
-        current_ee_quat = robot.data.body_quat_w[:, self.jaw_body_id]  # Current EE orientations
-        
-        # Convert to relative coordinates
-        env_origins = self.scene.env_origins
-        current_ee_pos = current_ee_pos - env_origins
-        
-        # Get Jacobian for ALL envs
+        # Get Jacobian for ALL envs from PhysX
         all_jacobians = robot.root_physx_view.get_jacobians()
         jacobian_all = all_jacobians[:, self.ee_jacobi_idx, :, self.arm_joint_ids]
+        
+        # Get CURRENT end-effector poses for ALL envs in WORLD frame
+        current_ee_pos_w = robot.data.body_pos_w[:, self.jaw_body_id]
+        current_ee_quat_w = robot.data.body_quat_w[:, self.jaw_body_id]
+        
+        # Convert current EE pose to BASE FRAME
+        # Option 1: If robot is fixed base at origin
+        if robot.is_fixed_base:
+            # For fixed-base robot, base frame = world frame shifted by env origin
+            env_origins = self.scene.env_origins
+            current_ee_pos_b = current_ee_pos_w - env_origins
+            current_ee_quat_b = current_ee_quat_w  # Orientation unchanged
+        else:
+            # Option 2: For floating base, need to transform
+            base_pos_w = robot.data.root_pos_w
+            base_quat_w = robot.data.root_quat_w
+            
+            from isaaclab.utils.math import subtract_frame_transforms
+            current_ee_pos_b, current_ee_quat_b = subtract_frame_transforms(
+                base_pos_w, base_quat_w,
+                current_ee_pos_w, current_ee_quat_w
+            )
         
         # Process TARGET pose
         eef_name = "eef"
@@ -270,25 +183,54 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
             target_pos = target_pos.unsqueeze(0).repeat(num_envs, 1)
             target_rot_matrix = target_rot_matrix.unsqueeze(0).repeat(num_envs, 1, 1)
         
+        # Convert rotation matrix to quaternion
         target_quat = quat_from_matrix(target_rot_matrix)
         
-        # Set the TARGET command
+        # CRITICAL: Ensure quaternion is (w, x, y, z) format
+        # Isaac Sim sometimes uses (x, y, z, w) format
+        # Check if this is needed by examining the quaternion values
+        # A valid quaternion should have norm = 1 and w component typically > 0.5 for small rotations
+        
+        # Debug: Print quaternion format check
+        if env_id == 0:  # Only print once
+            print(f"[DEBUG] Target quat shape: {target_quat.shape}")
+            print(f"[DEBUG] Target quat sample: {target_quat[0].cpu().numpy()}")
+            print(f"[DEBUG] Current quat sample: {current_ee_quat_b[0].cpu().numpy()}")
+        
+        # Set the TARGET command (in base frame)
         command = torch.cat([target_pos, target_quat], dim=-1)
-        self.diff_ik_controller.set_command(command)
+        self.diff_ik_controller.set_command(
+            command=target_pos,           # Only position (3D)
+            ee_quat=current_ee_quat_b    # Pass current orientation to maintain it
+        )
+        # self.diff_ik_controller.set_command(target_pos)
         
         # Compute IK with CURRENT pose and TARGET command
         joint_solution = self.diff_ik_controller.compute(
-            ee_pos=current_ee_pos,      # ✅ CURRENT position
-            ee_quat=current_ee_quat,    # ✅ CURRENT orientation  
+            ee_pos=current_ee_pos_b,      # Current position in base frame
+            ee_quat=current_ee_quat_b,    # Current orientation in base frame  
             jacobian=jacobian_all,
             joint_pos=current_joints_all
         )
         
-        # Extract solution for specific env
-        solution_for_env = joint_solution[env_id]
+        # Check for NaN or invalid solutions
+        if torch.isnan(joint_solution).any() or torch.isinf(joint_solution).any():
+            print(f"[WARNING] IK solution contains NaN/Inf for env {env_id}")
+            # Return current joints as fallback
+            solution_for_env = current_joints_all[env_id]
+        else:
+            # Extract solution for specific env
+            solution_for_env = joint_solution[env_id]
         
-        # Add gripper
+        # Add gripper action
         gripper_action = gripper_action_dict[eef_name]
+        
+        # Ensure gripper_action is a tensor with correct shape
+        if isinstance(gripper_action, (int, float)):
+            gripper_action = torch.tensor([gripper_action], device=self.device, dtype=torch.float32)
+        elif isinstance(gripper_action, torch.Tensor) and gripper_action.dim() == 0:
+            gripper_action = gripper_action.unsqueeze(0)
+        
         return torch.cat([solution_for_env, gripper_action], dim=0)
 
     def _fallback_action(self, current_joints, gripper_action):
