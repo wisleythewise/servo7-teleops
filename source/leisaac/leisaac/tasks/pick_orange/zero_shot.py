@@ -41,32 +41,11 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             scale=(1.0, 1.0, 1.0),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.0, 0.0, 0.0),
+            pos=(0.0, 1.0, 0.0),  # Move entire room 1m in +y direction
         )
     )
     
-    # White table to support the studio
-    table: AssetBaseCfg = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Table",
-        spawn=sim_utils.CuboidCfg(
-            size=(2.0, 2.0, 0.75),  # Table dimensions
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                kinematic_enabled=True,
-                disable_gravity=True,
-            ),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.95, 0.95, 0.95),  # White color
-                roughness=0.3,
-                metallic=0.0,
-            )
-        ),
-        init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.0, 0.0, 0.375),  # Table height
-        )
-    )
-    
-    # Studio floor - white floor inside the cube (on top of table)
+    # Studio floor - white floor inside the cube (on existing table_low_327)
     studio_floor: AssetBaseCfg = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/StudioFloor",
         spawn=sim_utils.CuboidCfg(
@@ -77,13 +56,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.95, 0.95, 0.95),  # White color
-                roughness=0.2,
+                diffuse_color=(0.82, 0.80, 0.78),  # Even more off-white, worn look
+                roughness=0.85,  # Very rough, almost chalk-like surface
                 metallic=0.0,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.0, 0.0, 0.775),  # On top of table
+            pos=(0.0, 1.0, 0.025),  # On existing table at x=0, y=1, z=0
         )
     )
     
@@ -98,13 +77,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.95, 0.95, 0.95),  # White color
-                roughness=0.2,
+                diffuse_color=(0.82, 0.80, 0.78),  # Even more off-white, worn look
+                roughness=0.85,  # Very rough, almost chalk-like surface
                 metallic=0.0,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(-0.725, 0.0, 1.175),  # Left side on table
+            pos=(-0.725, 1.0, 0.425),  # Left wall on existing table
         )
     )
     
@@ -119,13 +98,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.95, 0.95, 0.95),  # White color
-                roughness=0.2,
+                diffuse_color=(0.82, 0.80, 0.78),  # Even more off-white, worn look
+                roughness=0.85,  # Very rough, almost chalk-like surface
                 metallic=0.0,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.725, 0.0, 1.175),  # Right side on table
+            pos=(0.725, 1.0, 0.425),  # Right wall on existing table
         )
     )
     
@@ -140,13 +119,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.95, 0.95, 0.95),  # White color
-                roughness=0.2,
+                diffuse_color=(0.82, 0.80, 0.78),  # Even more off-white, worn look
+                roughness=0.85,  # Very rough, almost chalk-like surface
                 metallic=0.0,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.0, 0.5625, 1.175),  # Back side on table (25% less deep)
+            pos=(0.0, 1.5625, 0.425),  # Back wall on existing table (25% less deep)
         )
     )
     
@@ -167,7 +146,7 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(-0.75, -0.5625, 1.175),  # Front left vertical edge on table
+            pos=(-0.75, 0.4375, 0.425),  # Front left vertical edge on existing table
         )
     )
     
@@ -181,13 +160,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.7, 0.7, 0.7),
-                metallic=0.8,
-                roughness=0.3,
+                diffuse_color=(0.75, 0.75, 0.77),  # Slightly bluish aluminum
+                metallic=0.65,  # Less metallic for realism
+                roughness=0.35,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.75, -0.5625, 1.175),  # Front right vertical edge on table
+            pos=(0.75, 0.4375, 0.425),  # Front right vertical edge on existing table
         )
     )
     
@@ -201,13 +180,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.7, 0.7, 0.7),
-                metallic=0.8,
-                roughness=0.3,
+                diffuse_color=(0.75, 0.75, 0.77),  # Slightly bluish aluminum
+                metallic=0.65,  # Less metallic for realism
+                roughness=0.35,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(-0.75, 0.5625, 1.175),  # Back left vertical edge on table
+            pos=(-0.75, 1.5625, 0.425),  # Back left vertical edge on existing table
         )
     )
     
@@ -221,13 +200,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.7, 0.7, 0.7),
-                metallic=0.8,
-                roughness=0.3,
+                diffuse_color=(0.75, 0.75, 0.77),  # Slightly bluish aluminum
+                metallic=0.65,  # Less metallic for realism
+                roughness=0.35,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.75, 0.5625, 1.175),  # Back right vertical edge on table
+            pos=(0.75, 1.5625, 0.425),  # Back right vertical edge on existing table
         )
     )
     
@@ -242,13 +221,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.7, 0.7, 0.7),
-                metallic=0.8,
-                roughness=0.3,
+                diffuse_color=(0.75, 0.75, 0.77),  # Slightly bluish aluminum
+                metallic=0.65,  # Less metallic for realism
+                roughness=0.35,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(-0.75, 0.0, 0.775),  # Bottom left horizontal edge on table
+            pos=(-0.75, 1.0, 0.025),  # Bottom left horizontal edge on existing table
         )
     )
     
@@ -262,13 +241,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.7, 0.7, 0.7),
-                metallic=0.8,
-                roughness=0.3,
+                diffuse_color=(0.75, 0.75, 0.77),  # Slightly bluish aluminum
+                metallic=0.65,  # Less metallic for realism
+                roughness=0.35,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.75, 0.0, 0.775),  # Bottom right horizontal edge on table
+            pos=(0.75, 1.0, 0.025),  # Bottom right horizontal edge on existing table
         )
     )
     
@@ -282,13 +261,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.7, 0.7, 0.7),
-                metallic=0.8,
-                roughness=0.3,
+                diffuse_color=(0.75, 0.75, 0.77),  # Slightly bluish aluminum
+                metallic=0.65,  # Less metallic for realism
+                roughness=0.35,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.0, 0.5625, 0.775),  # Bottom back horizontal edge on table
+            pos=(0.0, 1.5625, 0.025),  # Bottom back horizontal edge on existing table
         )
     )
     
@@ -303,13 +282,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.7, 0.7, 0.7),
-                metallic=0.8,
-                roughness=0.3,
+                diffuse_color=(0.75, 0.75, 0.77),  # Slightly bluish aluminum
+                metallic=0.65,  # Less metallic for realism
+                roughness=0.35,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(-0.75, 0.0, 1.55),  # Top left horizontal edge
+            pos=(-0.75, 1.0, 0.8),  # Top left horizontal edge on existing table
         )
     )
     
@@ -323,13 +302,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.7, 0.7, 0.7),
-                metallic=0.8,
-                roughness=0.3,
+                diffuse_color=(0.75, 0.75, 0.77),  # Slightly bluish aluminum
+                metallic=0.65,  # Less metallic for realism
+                roughness=0.35,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.75, 0.0, 1.55),  # Top right horizontal edge
+            pos=(0.75, 1.0, 0.8),  # Top right horizontal edge on existing table
         )
     )
     
@@ -343,13 +322,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.7, 0.7, 0.7),
-                metallic=0.8,
-                roughness=0.3,
+                diffuse_color=(0.75, 0.75, 0.77),  # Slightly bluish aluminum
+                metallic=0.65,  # Less metallic for realism
+                roughness=0.35,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.0, 0.5625, 1.55),  # Top back horizontal edge
+            pos=(0.0, 1.5625, 0.8),  # Top back horizontal edge on existing table
         )
     )
     
@@ -376,13 +355,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
                 restitution=0.0,
             ),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(1.0, 0.5, 0.0),  # Orange color to stand out in white studio
-                metallic=0.0,
-                roughness=0.8,
+                diffuse_color=(0.95, 0.55, 0.15),  # More realistic orange
+                metallic=0.02,  # Tiny bit of sheen
+                roughness=0.75,
             )
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(0.0, 0.2, 0.815),  # On studio floor (on table), in front of robot
+            pos=(0.0, 1.0, 0.065),  # On studio floor on existing table, centered between robots
             rot=(1.0, 0.0, 0.0, 0.0),
         )
     )
@@ -404,7 +383,7 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(-0.75, -0.5625, 0.775),  # Front left bottom corner on table
+            pos=(-0.75, 0.4375, 0.025),  # Front left bottom corner on existing table
         )
     )
     
@@ -418,13 +397,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.1, 0.1, 0.1),
-                metallic=0.0,
-                roughness=0.7,
+                diffuse_color=(0.15, 0.15, 0.16),  # Not pure black - more realistic
+                metallic=0.05,  # Slight sheen on plastic
+                roughness=0.8,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.75, -0.5625, 0.775),  # Front right bottom corner on table
+            pos=(0.75, 0.4375, 0.025),  # Front right bottom corner on existing table
         )
     )
     
@@ -438,13 +417,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.1, 0.1, 0.1),
-                metallic=0.0,
-                roughness=0.7,
+                diffuse_color=(0.15, 0.15, 0.16),  # Not pure black - more realistic
+                metallic=0.05,  # Slight sheen on plastic
+                roughness=0.8,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(-0.75, 0.5625, 0.775),  # Back left bottom corner on table
+            pos=(-0.75, 1.5625, 0.025),  # Back left bottom corner on existing table
         )
     )
     
@@ -458,13 +437,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.1, 0.1, 0.1),
-                metallic=0.0,
-                roughness=0.7,
+                diffuse_color=(0.15, 0.15, 0.16),  # Not pure black - more realistic
+                metallic=0.05,  # Slight sheen on plastic
+                roughness=0.8,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.75, 0.5625, 0.775),  # Back right bottom corner on table
+            pos=(0.75, 1.5625, 0.025),  # Back right bottom corner on existing table
         )
     )
 
@@ -479,13 +458,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.1, 0.1, 0.1),
-                metallic=0.0,
-                roughness=0.7,
+                diffuse_color=(0.15, 0.15, 0.16),  # Not pure black - more realistic
+                metallic=0.05,  # Slight sheen on plastic
+                roughness=0.8,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(-0.75, -0.5625, 1.55),  # Front left top corner
+            pos=(-0.75, 0.4375, 0.8),  # Front left top corner on existing table
         )
     )
     
@@ -499,13 +478,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.1, 0.1, 0.1),
-                metallic=0.0,
-                roughness=0.7,
+                diffuse_color=(0.15, 0.15, 0.16),  # Not pure black - more realistic
+                metallic=0.05,  # Slight sheen on plastic
+                roughness=0.8,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.75, -0.5625, 1.55),  # Front right top corner
+            pos=(0.75, 0.4375, 0.8),  # Front right top corner on existing table
         )
     )
     
@@ -519,13 +498,13 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.1, 0.1, 0.1),
-                metallic=0.0,
-                roughness=0.7,
+                diffuse_color=(0.15, 0.15, 0.16),  # Not pure black - more realistic
+                metallic=0.05,  # Slight sheen on plastic
+                roughness=0.8,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(-0.75, 0.5625, 1.55),  # Back left top corner
+            pos=(-0.75, 1.5625, 0.8),  # Back left top corner on existing table
         )
     )
     
@@ -539,24 +518,27 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
             ),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.1, 0.1, 0.1),
-                metallic=0.0,
-                roughness=0.7,
+                diffuse_color=(0.15, 0.15, 0.16),  # Not pure black - more realistic
+                metallic=0.05,  # Slight sheen on plastic
+                roughness=0.8,
             )
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=(0.75, 0.5625, 1.55),  # Back right top corner
+            pos=(0.75, 1.5625, 0.8),  # Back right top corner on existing table
         )
     )
 
     # The robots - two side by side
     robot_left: ArticulationCfg = SO101_FOLLOWER_CFG.replace(prim_path="{ENV_REGEX_NS}/RobotLeft")
-    robot_right: ArticulationCfg = SO101_FOLLOWER_CFG.replace(prim_path="{ENV_REGEX_NS}/RobotRight")
+    robot: ArticulationCfg = SO101_FOLLOWER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
     
-    # Studio lighting - bright white lighting for photo studio environment
+    # Ambient dome light - soft, natural lighting
     dome_light = AssetBaseCfg(
         prim_path="/World/DomeLight",
-        spawn=sim_utils.DomeLightCfg(color=(1.0, 1.0, 1.0), intensity=800.0),
+        spawn=sim_utils.DomeLightCfg(
+            color=(0.88, 0.82, 0.70),  # Even warmer, more muted
+            intensity=50.0,  # Much dimmer ambient
+        ),
     )
 
     wrist: TiledCameraCfg = TiledCameraCfg(
@@ -574,6 +556,7 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
         height=480,
         update_period=1 / 30.0,  # 30FPS
     )
+    
     front: TiledCameraCfg = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base/front_camera",
         offset=TiledCameraCfg.OffsetCfg(pos=(0.0, -0.5, 0.6), rot=(0.1650476, -0.9862856, 0.0, 0.0), convention="ros"),  # wxyz
@@ -590,10 +573,18 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
         update_period=1 / 30.0,  # 30FPS
     )
 
-    # Additional studio light for even illumination
+    # Directional key light - creates shadows and depth
     light = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/StudioLight",
-        spawn=sim_utils.DomeLightCfg(color=(1.0, 1.0, 1.0), intensity=2000.0),
+        prim_path="{ENV_REGEX_NS}/KeyLight",
+        spawn=sim_utils.DistantLightCfg(
+            color=(0.90, 0.85, 0.75),  # Very warm, muted directional
+            intensity=120.0,  # Much dimmer directional light
+            angle=20.0,  # Extremely diffused shadows
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(
+            pos=(2.0, -2.0, 3.0),  # Position for angled lighting
+            rot=(0.924, -0.383, 0.0, 0.0),  # Angled down and to the side
+        )
     )
 
 
@@ -608,11 +599,11 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
 @configclass
 class ActionsCfg:
     """Configuration for the actions."""
+    # Main robot actions (right robot only - left robot is visual only)
     arm_action: mdp.JointPositionActionCfg = mdp.JointPositionActionCfg(
         asset_name="robot",
         joint_names=["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"],
         scale=1.0,
-        # Note: no use_default_offset parameter (not in your teleop version)
     )
     gripper_action: mdp.JointPositionActionCfg = mdp.JointPositionActionCfg(
         asset_name="robot",
@@ -721,9 +712,13 @@ class ZeroShotEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.physx.friction_correlation_distance = 0.00625
         self.sim.render.enable_translucency = True
 
-        # Position robot on the studio floor (on table) against the back wall, rotated 180 degrees
-        self.scene.robot.init_state.pos = (0.0, 0.6, 0.8)  # x: centered, y: against back wall, z: on studio floor on table
-        self.scene.robot.init_state.rot = (0.0, 0.0, 1.0, 0.0)  # 180 degree rotation around z-axis (w, x, y, z)
+        # Position both robots on the studio floor (on table) at the front edge, rotated 180° around z-axis
+        # robot_left is visual only - not controlled by teleoperation
+        self.scene.robot_left.init_state.pos = (-0.25, 0.5, 0.05)  # Left robot on existing table (visual only)
+        self.scene.robot_left.init_state.rot = (0.0, 0.0, 0.0, 1.0)  # 180° rotation around z-axis (w, x, y, z)
+        # robot is the main controllable robot
+        self.scene.robot.init_state.pos = (0.25, 0.5, 0.05)  # Right robot on existing table (main controllable)
+        self.scene.robot.init_state.rot = (0.0, 0.0, 0.0, 1.0)  # 180° rotation around z-axis (w, x, y, z)
         
         # No need for parse_usd_and_create_subassets since we're creating objects programmatically
         # parse_usd_and_create_subassets(KITCHEN_WITH_ORANGE_USD_PATH, self, specific_name_list=['Orange001', 'Orange002', 'Orange003', 'Plate'])
@@ -745,6 +740,7 @@ class ZeroShotEnvCfg(ManagerBasedRLEnvCfg):
     def use_teleop_device(self, teleop_device) -> None:
         self.actions = init_action_cfg(self.actions, device=teleop_device)
         if teleop_device == "keyboard":
+            self.scene.robot_left.spawn.rigid_props.disable_gravity = True
             self.scene.robot.spawn.rigid_props.disable_gravity = True
 
     def preprocess_device_action(self, action: dict[str, Any], teleop_device) -> torch.Tensor:

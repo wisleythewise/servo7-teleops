@@ -70,7 +70,9 @@ class RateLimiter:
             while self.last_time < time.time():
                 self.last_time += self.sleep_duration
 
-
+"""
+ python ./scripts/environments/teleoperation/teleop_se3_agent.py --task LeIsaac-SO101-ZeroShot-v0 --teleop_device keyboard --enable_cameras
+"""
 def parse_dataset(dataset_file: str, episode_index: int, task_type: str, device: str):
     with h5py.File(dataset_file, 'r') as f:
         demo_names = list(f['data'].keys())
