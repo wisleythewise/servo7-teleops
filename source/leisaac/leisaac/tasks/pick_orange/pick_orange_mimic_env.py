@@ -218,21 +218,6 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
             carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
             return None
         
-    def target_eef_pose_to_action(
-        self,
-        target_eef_pose_dict: dict,
-        gripper_action_dict: dict,
-        action_noise_dict: dict | None = None,
-        env_id: int = 0,
-    ) -> torch.Tensor:
-        """TEST VERSION - Return 6 joint action (5 arm + 1 gripper)."""
-        robot = self.scene["robot"]
-        current_arm_joints = robot.data.joint_pos[env_id, self.arm_joint_ids]  # 5 joints
-        current_gripper_joint = robot.data.joint_pos[env_id, self.gripper_joint_id:self.gripper_joint_id+1]  # 1 joint
-        
-        # Return 6 total joints (5 arm + 1 gripper)
-        return torch.cat([current_arm_joints, current_gripper_joint], dim=0)
-
     # def target_eef_pose_to_action(
     #     self,
     #     target_eef_pose_dict: dict,
@@ -240,79 +225,95 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
     #     action_noise_dict: dict | None = None,
     #     env_id: int = 0,
     # ) -> torch.Tensor:
-    #     """Convert target EE pose to joint positions using DifferentialIKController."""
-    #     try:
-    #         print(f"\n[DEBUG] ========== target_eef_pose_to_action for env {env_id} ==========")
+    #     """DIRTY FIX - Return exactly 6 values to match action space."""
+    #     robot = self.scene["robot"]
+    #     # Get first 6 joint positions (5 arm + 1 gripper)
+    #     all_joints = robot.data.joint_pos[env_id, :6]  # First 6 joints
+        
+    #     # Return exactly 6 values
+    #     return all_joints
+
+    def target_eef_pose_to_action(
+        self,
+        target_eef_pose_dict: dict,
+        gripper_action_dict: dict,
+        action_noise_dict: dict | None = None,
+        env_id: int = 0,
+    ) -> torch.Tensor:
+        """Convert target EE pose to joint positions using DifferentialIKController."""
+        try:
+            print(f"\n[DEBUG] ========== target_eef_pose_to_action for env {env_id} ==========")
             
-    #         eef_name = "eef"
-    #         target_eef_pose = target_eef_pose_dict[eef_name]
+            eef_name = "eef"
+            target_eef_pose = target_eef_pose_dict[eef_name]
             
-    #         # Extract position and rotation matrix directly
-    #         target_pos, target_rot_matrix = PoseUtils.unmake_pose(target_eef_pose)
+            # Extract position and rotation matrix directly
+            target_pos, target_rot_matrix = PoseUtils.unmake_pose(target_eef_pose)
             
-    #         # Ensure proper shape (remove batch dimension if single env)
-    #         if target_pos.dim() > 1 and target_pos.shape[0] == 1:
-    #             target_pos = target_pos.squeeze(0)
-    #         if target_rot_matrix.dim() > 2 and target_rot_matrix.shape[0] == 1:
-    #             target_rot_matrix = target_rot_matrix.squeeze(0)
+            # Ensure proper shape (remove batch dimension if single env)
+            if target_pos.dim() > 1 and target_pos.shape[0] == 1:
+                target_pos = target_pos.squeeze(0)
+            if target_rot_matrix.dim() > 2 and target_rot_matrix.shape[0] == 1:
+                target_rot_matrix = target_rot_matrix.squeeze(0)
             
-    #         # Convert rotation matrix to quaternion using Isaac's utility
-    #         # This should handle dimensions properly
-    #         target_quat = quat_from_matrix(target_rot_matrix)
+            # Convert rotation matrix to quaternion using Isaac's utility
+            # This should handle dimensions properly
+            target_quat = quat_from_matrix(target_rot_matrix)
             
-    #         print(f"[DEBUG] Target EE pose:")
-    #         print(f"  - Position: {target_pos.cpu().numpy()}")
-    #         print(f"  - Quaternion: {target_quat.cpu().numpy()}")
+            print(f"[DEBUG] Target EE pose:")
+            print(f"  - Position: {target_pos.cpu().numpy()}")
+            print(f"  - Quaternion: {target_quat.cpu().numpy()}")
             
-    #         # Get current joint positions
-    #         robot = self.scene["robot"]
-    #         current_joints = robot.data.joint_pos[env_id, self.arm_joint_ids]
+            # Get current joint positions
+            robot = self.scene["robot"]
+            current_joints = robot.data.joint_pos[env_id, self.arm_joint_ids]
             
-    #         # Get Jacobian from PhysX
-    #         jacobian = self._get_jacobian_for_env(env_id)
+            # Get Jacobian from PhysX
+            jacobian = self._get_jacobian_for_env(env_id)
             
-    #         if jacobian is None:
-    #             carb.log_error("[ERROR] Failed to get valid Jacobian")
-    #             return self._fallback_action(current_joints, gripper_action_dict[eef_name])
+            if jacobian is None:
+                carb.log_error("[ERROR] Failed to get valid Jacobian")
+                return self._fallback_action(current_joints, gripper_action_dict[eef_name])
             
-    #         # Solve IK using DifferentialIKController
-    #         if self.use_diff_ik:
-    #             solution = self._solve_diff_ik(
-    #                 target_pos,
-    #                 target_quat,
-    #                 jacobian,
-    #                 current_joints,
-    #                 env_id
-    #             )
-    #         else:
-    #             carb.log_warn("[WARNING] DifferentialIKController not available, using fallback")
-    #             solution = None
+            # Solve IK using DifferentialIKController
+            if self.use_diff_ik:
+                solution = self._solve_diff_ik(
+                    target_pos,
+                    target_quat,
+                    jacobian,
+                    current_joints,
+                    env_id
+                )
+            else:
+                carb.log_warn("[WARNING] DifferentialIKController not available, using fallback")
+                solution = None
             
-    #         if solution is None:
-    #             carb.log_warn("[WARNING] IK failed, using current joint positions")
-    #             solution = current_joints.cpu().numpy()
+            if solution is None:
+                carb.log_warn("[WARNING] IK failed, using current joint positions")
+                solution = current_joints.cpu().numpy()
             
-    #         # Convert solution to tensor
-    #         target_joints = torch.tensor(solution, device=self.device, dtype=torch.float32)
+            # Convert solution to tensor
+            target_joints = torch.tensor(solution, device=self.device, dtype=torch.float32)
             
-    #         # Add gripper action
-    #         gripper_action = gripper_action_dict[eef_name]
-    #         action = torch.cat([target_joints, gripper_action], dim=0)
+            # Add gripper action
+            gripper_action = gripper_action_dict[eef_name]
+            action = torch.cat([target_joints, gripper_action], dim=0)
             
-    #         print(f"[DEBUG] Final action: {action.cpu().numpy()}")
-    #         print(f"[DEBUG] ========== End target_eef_pose_to_action ==========\n")
+            print(f"[DEBUG] Final action: {action.cpu().numpy()}")
+            print(f"[DEBUG] ========== End target_eef_pose_to_action ==========\n")
+            carb.log_error(f"[KANKER] kanker kanker kanker {action}")
             
-    #         return action
+            return action
             
-    #     except Exception as e:
-    #         carb.log_error(f"[ERROR] Failed in target_eef_pose_to_action")
-    #         carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+        except Exception as e:
+            carb.log_error(f"[ERROR] Failed in target_eef_pose_to_action")
+            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
             
-    #         # Return safe fallback action
-    #         robot = self.scene["robot"]
-    #         current_joints = robot.data.joint_pos[env_id, self.arm_joint_ids]
-    #         gripper_action = gripper_action_dict.get("eef", torch.zeros(1, device=self.device))
-    #         return self._fallback_action
+            # Return safe fallback action
+            robot = self.scene["robot"]
+            current_joints = robot.data.joint_pos[env_id, self.arm_joint_ids]
+            gripper_action = gripper_action_dict.get("eef", torch.zeros(1, device=self.device))
+            return self._fallback_action
 
     def _fallback_action(self, current_joints, gripper_action):
         """Create a safe fallback action when IK fails."""
