@@ -77,7 +77,7 @@ def parse_dataset(dataset_file: str, episode_index: int, task_type: str, device:
         demo_name = demo_names[episode_index]
         demo_group = f['data'][demo_name]
 
-        seed = int(demo_group.attrs.get("seed", -1))
+        seed = 42 
 
         if task_type == "bi-so101leader":
             left_joint_pos = torch.tensor(np.array(demo_group['obs/left_joint_pos']), device=device)
