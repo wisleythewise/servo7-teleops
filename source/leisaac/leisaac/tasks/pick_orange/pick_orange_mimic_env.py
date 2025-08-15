@@ -1,76 +1,221 @@
-"""Pick Orange Mimic Environment with correct LULA solver implementation."""
+"""Pick Orange Mimic Environment with DifferentialIKController implementation."""
 
 from isaaclab.envs import ManagerBasedRLMimicEnv
 import isaaclab.utils.math as PoseUtils
+from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
+from isaaclab.utils.math import subtract_frame_transforms, quat_from_matrix, matrix_from_quat
 import torch
 import gymnasium as gym
 from typing import Dict, Any, Optional, Sequence
 import numpy as np
 import os
+import traceback
+import sys
 
-# Enable extensions before importing motion generation
-from isaacsim.core.utils.extensions import enable_extension
-enable_extension("isaacsim.robot_motion.lula")
-enable_extension("isaacsim.robot_motion.motion_generation")
-
-from isaacsim.robot_motion.motion_generation import ArticulationKinematicsSolver, LulaKinematicsSolver
-from isaacsim.robot_motion.motion_generation import interface_config_loader
-
+# Logging utilities
 import carb
 
 class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
-    """Pick Orange environment with Mimic support for annotation."""
+    """Pick Orange environment with Mimic support using DifferentialIKController."""
     
     def __init__(self, cfg, render_mode=None, **kwargs):
-        super().__init__(cfg, render_mode, **kwargs)
-        
-        robot = self.scene["robot"]
-        gripper_body_id = robot.find_bodies("gripper")[0]
-        ee_pos_world = robot.data.body_pos_w[0, gripper_body_id].cpu().numpy()
-        ee_pos_relative = ee_pos_world - self.scene.env_origins[0].cpu().numpy()
-        
-        self.isaac_ee_home = ee_pos_relative.flatten()
-        
-        self.articulation_solvers = {}
-        self.lula_solver = None
-        
-        self._setup_lula_ik()
-        
-    def _setup_lula_ik(self):
-        """Initialize LULA IK solver following Isaac Sim documentation pattern."""
-        urdf_path = os.path.join(
-            os.path.dirname(__file__), 
-            "robot.urdf"
-        )
-        
-        yaml_path = os.path.join(
-            os.path.dirname(__file__), 
-            "lulu.yaml"
-        )
-        
-        if not os.path.exists(yaml_path):
-            self._create_basic_descriptor(urdf_path, yaml_path)
+        """Initialize environment with DifferentialIKController setup."""
+        print("[DEBUG] Initializing PickOrangeMimicEnv with DifferentialIKController")
         
         try:
-            self.lula_solver = LulaKinematicsSolver(
-                robot_description_path=yaml_path,
-                urdf_path=urdf_path
-            )
+            super().__init__(cfg, render_mode, **kwargs)
             
+            # Get robot reference
             robot = self.scene["robot"]
+            gripper_body_id = robot.find_bodies("gripper")[0]
             
-            self.articulation_solver = ArticulationKinematicsSolver(
-                robot,
-                self.lula_solver,
-                "gripper"
-            )
+            # Calculate home position
+            ee_pos_world = robot.data.body_pos_w[0, gripper_body_id].cpu().numpy()
+            ee_pos_relative = ee_pos_world - self.scene.env_origins[0].cpu().numpy()
+            self.isaac_ee_home = ee_pos_relative.flatten()
             
-            self.use_lula = True
+            print(f"[DEBUG] Gripper body ID: {gripper_body_id}")
+            print(f"[DEBUG] EE home position (relative): {self.isaac_ee_home}")
+            
+            # Setup DifferentialIKController
+            self._setup_diff_ik()
+            
+            # Get joint and body IDs for IK computation
+            self._setup_robot_indices()
+            
+            print("[DEBUG] PickOrangeMimicEnv initialization complete")
             
         except Exception as e:
-            print(f"[ERROR] Failed to initialize LULA: {e}")
-            self.use_lula = False
-    
+            carb.log_error(f"[ERROR] Failed to initialize PickOrangeMimicEnv")
+            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            raise
+
+    def _setup_robot_indices(self):
+        """Setup robot joint and body indices for IK computation."""
+        try:
+            robot = self.scene["robot"]
+            
+            # Hardcoded joint IDs for the 6 DOF arm (including gripper)
+            self.arm_joint_ids = [0, 1, 2, 3, 4, 5]  # shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper
+            
+            # Hardcoded body ID for jaw (gripper end-effector)
+            self.jaw_body_id = 6  # jaw is the 7th body (0-indexed)
+            
+            # For this fixed-base robot, Jacobian index is body index - 1
+            self.ee_jacobi_idx = self.jaw_body_id - 1
+            
+            print(f"[DEBUG] Robot indices setup:")
+            print(f"  - Arm joint IDs: {self.arm_joint_ids}")
+            print(f"  - Jaw body ID: {self.jaw_body_id}")
+            print(f"  - EE Jacobian index: {self.ee_jacobi_idx}")
+            print(f"  - Is fixed base: {robot.is_fixed_base}")
+            
+        except Exception as e:
+            carb.log_error(f"[ERROR] Failed to setup robot indices")
+            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            raise
+
+    def _setup_diff_ik(self):
+        """Initialize DifferentialIKController."""
+        try:
+            print("[DEBUG] Setting up DifferentialIKController")
+            
+            # Configure the controller
+            self.diff_ik_cfg = DifferentialIKControllerCfg(
+                command_type="pose",        # Control both position and orientation
+                use_relative_mode=False,    # Use absolute pose commands
+                ik_method="dls",            # Use damped least-squares (most robust)
+                ik_params={
+                    "lambda_val": 0.01,     # Damping factor for DLS
+                }
+            )
+            
+            # Get number of environments
+            num_envs = self.scene.num_envs if hasattr(self.scene, 'num_envs') else 1
+            
+            # Create the controller
+            self.diff_ik_controller = DifferentialIKController(
+                self.diff_ik_cfg,
+                num_envs=num_envs,
+                device=self.device
+            )
+            
+            print(f"[DEBUG] DifferentialIKController created successfully")
+            print(f"  - Command type: {self.diff_ik_cfg.command_type}")
+            print(f"  - IK method: {self.diff_ik_cfg.ik_method}")
+            print(f"  - Relative mode: {self.diff_ik_cfg.use_relative_mode}")
+            print(f"  - Number of environments: {num_envs}")
+            print(f"  - Device: {self.device}")
+            
+            self.use_diff_ik = True
+            
+        except Exception as e:
+            carb.log_error(f"[ERROR] Failed to setup DifferentialIKController")
+            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            self.use_diff_ik = False
+            raise
+
+    def _solve_diff_ik(self, target_pos_b, target_quat_b, jacobian, current_joints, env_id=0):
+        """
+        Solve IK using DifferentialIKController.
+        
+        Args:
+            target_pos_b: Target position in base frame
+            target_quat_b: Target quaternion in base frame (w, x, y, z)
+            jacobian: Jacobian matrix from PhysX
+            current_joints: Current joint positions
+            env_id: Environment ID for debugging
+            
+        Returns:
+            Joint positions solution or None if failed
+        """
+        try:
+            print(f"\n[DEBUG] Solving IK with DifferentialIKController for env {env_id}")
+            
+            # Convert inputs to tensors if needed
+            if isinstance(target_pos_b, np.ndarray):
+                target_pos_b = torch.tensor(target_pos_b, device=self.device, dtype=torch.float32)
+            if isinstance(target_quat_b, np.ndarray):
+                target_quat_b = torch.tensor(target_quat_b, device=self.device, dtype=torch.float32)
+            if isinstance(current_joints, np.ndarray):
+                current_joints = torch.tensor(current_joints, device=self.device, dtype=torch.float32)
+                
+            # Ensure correct shapes
+            if target_pos_b.dim() == 1:
+                target_pos_b = target_pos_b.unsqueeze(0)
+            if target_quat_b.dim() == 1:
+                target_quat_b = target_quat_b.unsqueeze(0)
+            if current_joints.dim() == 1:
+                current_joints = current_joints.unsqueeze(0)
+            if jacobian.dim() == 2:
+                jacobian = jacobian.unsqueeze(0)
+                
+            print(f"[DEBUG] Input shapes:")
+            print(f"  - Target position: {target_pos_b.shape} = {target_pos_b.squeeze().cpu().numpy()}")
+            print(f"  - Target quaternion: {target_quat_b.shape} = {target_quat_b.squeeze().cpu().numpy()}")
+            print(f"  - Current joints: {current_joints.shape} = {current_joints.squeeze().cpu().numpy()}")
+            print(f"  - Jacobian shape: {jacobian.shape}")
+            
+            # Set the desired command
+            command = torch.cat([target_pos_b, target_quat_b], dim=-1)
+            self.diff_ik_controller.set_command(command)
+            
+            print(f"[DEBUG] Command set: {command.squeeze().cpu().numpy()}")
+            
+            # Get current EE pose (needed for error computation)
+            # For now, we'll compute it from forward kinematics if needed
+            # This is a simplified version - you might need to adjust based on your robot
+            
+            # Compute IK solution
+            joint_solution = self.diff_ik_controller.compute(
+                ee_pos=target_pos_b,
+                ee_quat=target_quat_b,
+                jacobian=jacobian,
+                joint_pos=current_joints
+            )
+            
+            print(f"[DEBUG] IK solution computed: {joint_solution.squeeze().cpu().numpy()}")
+            
+            # Check for NaN or inf values
+            if torch.isnan(joint_solution).any() or torch.isinf(joint_solution).any():
+                carb.log_warn(f"[WARNING] IK solution contains NaN or Inf values")
+                return None
+                
+            return joint_solution.squeeze().cpu().numpy()
+            
+        except Exception as e:
+            carb.log_error(f"[ERROR] Failed to solve IK with DifferentialIKController")
+            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            return None
+
+    def _get_jacobian_for_env(self, env_id=0):
+        """Get Jacobian matrix from PhysX for specific environment."""
+        try:
+            robot = self.scene["robot"]
+            
+            # Get Jacobian from PhysX
+            # Shape: [num_envs, num_bodies, 6, num_joints]
+            all_jacobians = robot.root_physx_view.get_jacobians()
+            
+            # Extract Jacobian for specific environment and end-effector
+            jacobian = all_jacobians[env_id, self.ee_jacobi_idx, :, self.arm_joint_ids]
+            
+            print(f"[DEBUG] Jacobian retrieved from PhysX:")
+            print(f"  - Full Jacobian shape: {all_jacobians.shape}")
+            print(f"  - Extracted Jacobian shape: {jacobian.shape}")
+            print(f"  - Jacobian norm: {torch.norm(jacobian).item():.4f}")
+            
+            # Check for validity
+            if torch.isnan(jacobian).any() or torch.isinf(jacobian).any():
+                carb.log_error(f"[ERROR] Jacobian contains NaN or Inf values!")
+                return None
+                
+            return jacobian
+            
+        except Exception as e:
+            carb.log_error(f"[ERROR] Failed to get Jacobian from PhysX")
+            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            return None
 
     def target_eef_pose_to_action(
         self,
@@ -79,212 +224,286 @@ class PickOrangeMimicEnv(ManagerBasedRLMimicEnv):
         action_noise_dict: dict | None = None,
         env_id: int = 0,
     ) -> torch.Tensor:
-        """Convert target EE pose to joint positions using LULA IK."""
-        eef_name = "eef"
-        
-        target_eef_pose = target_eef_pose_dict[eef_name]
-        target_pos_raw, target_rot = PoseUtils.unmake_pose(target_eef_pose)
-        
-        if target_pos_raw.dim() > 1:
-            target_pos_raw = target_pos_raw.squeeze(0)
-        
-        env_origin = self.scene.env_origins[env_id]
-        
-        robot = self.scene["robot"]
-        
-        robot_base_position_world = env_origin.cpu().numpy()
-        robot_base_orientation = np.array([1.0, 0.0, 0.0, 0.0])
-        
-        print(f"\n[DEBUG - Env {env_id}]")
-        print(f"  Robot base (world): {robot_base_position_world}")
-        
-        target_pos_world = target_pos_raw.cpu().numpy() + robot_base_position_world
-        
-        print(f"  Target (relative): {target_pos_raw.cpu().numpy()}")
-        print(f"  Target (world): {target_pos_world}")
-        
-        current_joints = robot.data.joint_pos[env_id, :5].cpu().numpy()
-        
-        if target_rot.dim() == 2:
-            target_quat = PoseUtils.quat_from_matrix(target_rot.unsqueeze(0))[0]
-        else:
-            target_quat = PoseUtils.quat_from_matrix(target_rot)[0] if target_rot.shape[0] == 1 else PoseUtils.quat_from_matrix(target_rot)
-        
-        if target_quat.dim() > 0:
-            target_quat = target_quat.reshape(4)
-        target_quat_np = target_quat.cpu().numpy()
-        
-        if hasattr(self, 'use_lula') and self.use_lula:
-            solution = self._solve_lula_ik(
-                target_pos_world, 
-                target_quat_np, 
-                robot_base_position_world,
-                robot_base_orientation,
-                current_joints
-            )
-        else:
-            solution = self._solve_simple_ik(target_pos_raw.cpu().numpy(), current_joints)
-        
-        if solution is None:
-            solution = current_joints
-        
-        target_joints = torch.tensor(solution, device=self.device, dtype=torch.float32)
-        
-        gripper_action = gripper_action_dict[eef_name]
-        action = torch.cat([target_joints, gripper_action], dim=0)
-        
-        return action
-
-
-    def _solve_lula_ik(self, target_pos_world, target_quat, robot_base_pos, robot_base_quat, current_joints=None):
-        """
-        Solve IK using LULA following Isaac Sim documentation pattern.
-        """
+        """Convert target EE pose to joint positions using DifferentialIKController."""
         try:
-            print(f"  LULA target (world): {target_pos_world}")
+            print(f"\n[DEBUG] ========== target_eef_pose_to_action for env {env_id} ==========")
             
-            self.lula_solver.set_robot_base_pose(
-                robot_base_pos.tolist(),
-                robot_base_quat.tolist()
-            )
+            eef_name = "eef"
+            target_eef_pose = target_eef_pose_dict[eef_name]
             
-            if current_joints is not None:
-                self.articulation_solver.set_joint_positions(current_joints.tolist() if hasattr(current_joints, 'tolist') else list(current_joints))
+            # Extract position and rotation from pose matrix
+            target_pos_raw, target_rot = PoseUtils.unmake_pose(target_eef_pose)
             
-            success, joint_positions = self.articulation_solver.compute_inverse_kinematics(
-                target_position=target_pos_world.tolist(),
-                target_orientation=target_quat.tolist()
-            )
+            if target_pos_raw.dim() > 1:
+                target_pos_raw = target_pos_raw.squeeze(0)
             
-            if success:
-                print(f"  IK solution: {joint_positions[:5]}")
-                return joint_positions[:5]
+            print(f"[DEBUG] Target EE pose extracted:")
+            print(f"  - Position (raw): {target_pos_raw.cpu().numpy()}")
+            print(f"  - Rotation matrix shape: {target_rot.shape}")
+            
+            # Get robot and environment info
+            robot = self.scene["robot"]
+            env_origin = self.scene.env_origins[env_id]
+            
+            # Get current joint positions
+            current_joints = robot.data.joint_pos[env_id, self.arm_joint_ids]
+            
+            print(f"[DEBUG] Robot state:")
+            print(f"  - Environment origin: {env_origin.cpu().numpy()}")
+            print(f"  - Current joint positions: {current_joints.cpu().numpy()}")
+            
+            # Get current robot pose for frame transformation
+            root_pose_w = robot.data.root_pose_w[env_id]
+            root_pos_w = root_pose_w[:3]
+            root_quat_w = root_pose_w[3:7]
+            
+            # Convert target rotation matrix to quaternion
+            if target_rot.dim() == 2:
+                target_quat = quat_from_matrix(target_rot.unsqueeze(0))[0]
             else:
-                carb.log_warn("IK did not converge to a solution")
-                
-                target_pos_relative = target_pos_world - robot_base_pos
-                
-                self.lula_solver.set_robot_base_pose(
-                    [0, 0, 0],
-                    [1, 0, 0, 0]
-                )
-                
-                success_retry, joint_positions_retry = self.articulation_solver.compute_inverse_kinematics(
-                    target_position=target_pos_relative.tolist(),
-                    target_orientation=target_quat.tolist()
-                )
-                
-                if success_retry:
-                    print(f"  IK solution (relative): {joint_positions_retry[:5]}")
-                    return joint_positions_retry[:5]
-                else:
-                    return current_joints
-                
-        except Exception as e:
-            carb.log_error(f"LULA IK Error: {e}")
-            return current_joints
+                target_quat = quat_from_matrix(target_rot)[0] if target_rot.shape[0] == 1 else quat_from_matrix(target_rot)
             
-    def _solve_simple_ik(self, target_pos, current_joints):
-        """Simple fallback IK solver."""
-        return current_joints
+            if target_quat.dim() > 0:
+                target_quat = target_quat.reshape(4)
+                
+            print(f"[DEBUG] Target quaternion: {target_quat.cpu().numpy()}")
+            
+            # The target is in environment-relative coordinates
+            # We need to convert to base frame for IK computation
+            
+            # Since the target is already relative to environment origin,
+            # and if robot base is at environment origin, then target_pos_raw is already in base frame
+            target_pos_b = target_pos_raw
+            target_quat_b = target_quat
+            
+            print(f"[DEBUG] Target in base frame:")
+            print(f"  - Position: {target_pos_b.cpu().numpy()}")
+            print(f"  - Quaternion: {target_quat_b.cpu().numpy()}")
+            
+            # Get Jacobian from PhysX
+            jacobian = self._get_jacobian_for_env(env_id)
+            
+            if jacobian is None:
+                carb.log_error("[ERROR] Failed to get valid Jacobian")
+                return self._fallback_action(current_joints, gripper_action_dict[eef_name])
+            
+            # Solve IK using DifferentialIKController
+            if self.use_diff_ik:
+                solution = self._solve_diff_ik(
+                    target_pos_b,
+                    target_quat_b,
+                    jacobian,
+                    current_joints,
+                    env_id
+                )
+            else:
+                carb.log_warn("[WARNING] DifferentialIKController not available, using fallback")
+                solution = None
+            
+            if solution is None:
+                carb.log_warn("[WARNING] IK failed, using current joint positions")
+                solution = current_joints.cpu().numpy()
+            
+            # Convert solution to tensor
+            target_joints = torch.tensor(solution, device=self.device, dtype=torch.float32)
+            
+            # Add gripper action
+            gripper_action = gripper_action_dict[eef_name]
+            action = torch.cat([target_joints, gripper_action], dim=0)
+            
+            print(f"[DEBUG] Final action: {action.cpu().numpy()}")
+            print(f"[DEBUG] ========== End target_eef_pose_to_action ==========\n")
+            
+            return action
+            
+        except Exception as e:
+            carb.log_error(f"[ERROR] Failed in target_eef_pose_to_action")
+            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            
+            # Return safe fallback action
+            robot = self.scene["robot"]
+            current_joints = robot.data.joint_pos[env_id, self.arm_joint_ids]
+            gripper_action = gripper_action_dict.get("eef", torch.zeros(1, device=self.device))
+            return self._fallback_action(current_joints, gripper_action)
+
+    def _fallback_action(self, current_joints, gripper_action):
+        """Create a safe fallback action when IK fails."""
+        try:
+            if isinstance(current_joints, np.ndarray):
+                current_joints = torch.tensor(current_joints, device=self.device, dtype=torch.float32)
+            
+            if current_joints.dim() > 1:
+                current_joints = current_joints.squeeze()
+                
+            return torch.cat([current_joints, gripper_action], dim=0)
+            
+        except Exception as e:
+            carb.log_error(f"[ERROR] Failed to create fallback action")
+            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            # Return zeros as last resort
+            return torch.zeros(6, device=self.device, dtype=torch.float32)
 
     def get_robot_eef_pose(self, eef_name: str, env_ids: Sequence[int] | None = None) -> torch.Tensor:
         """Get current robot end effector pose as 4x4 transformation matrix."""
-        robot = self.scene["robot"]
-        gripper_body_id = robot.find_bodies("gripper")[0]
-        
-        if env_ids is None:
-            env_ids = slice(None)
-        
-        gripper_pos = robot.data.body_pos_w[env_ids, gripper_body_id]
-        gripper_quat = robot.data.body_quat_w[env_ids, gripper_body_id]
-        
-        env_origins = self.scene.env_origins[env_ids]
-        gripper_pos = gripper_pos - env_origins
-        
-        pose_matrix = PoseUtils.make_pose(
-            gripper_pos, 
-            PoseUtils.matrix_from_quat(gripper_quat)
-        )
-        
-        return pose_matrix 
+        try:
+            robot = self.scene["robot"]
+            
+            if env_ids is None:
+                env_ids = slice(None)
+            
+            gripper_pos = robot.data.body_pos_w[env_ids, self.jaw_body_id]
+            gripper_quat = robot.data.body_quat_w[env_ids, self.jaw_body_id]
+            
+            # Ensure proper tensor dimensions
+            if gripper_pos.dim() == 1:
+                gripper_pos = gripper_pos.unsqueeze(0)
+            if gripper_quat.dim() == 1:
+                gripper_quat = gripper_quat.unsqueeze(0)
+            
+            # Convert to environment-relative coordinates
+            env_origins = self.scene.env_origins[env_ids]
+            if env_origins.dim() == 1:
+                env_origins = env_origins.unsqueeze(0)
+            gripper_pos = gripper_pos - env_origins
+            
+            # Create pose matrix
+            pose_matrix = PoseUtils.make_pose(
+                gripper_pos, 
+                matrix_from_quat(gripper_quat)
+            )
+            
+            return pose_matrix
+            
+        except Exception as e:
+            carb.log_error(f"[ERROR] Failed to get robot EE pose")
+            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            raise
     
     def action_to_target_eef_pose(self, action: torch.Tensor) -> dict[str, torch.Tensor]:
         """Convert joint position action to target EE pose using FK."""
-        eef_name = "eef"
-        
-        robot = self.scene["robot"]
-        
-        current_joint_pos = robot.data.joint_pos.clone()
-        
-        target_joint_pos = current_joint_pos.clone()
-        target_joint_pos[:, :5] = action[:, :5]
-        
-        original_joint_pos = current_joint_pos.clone()
-        robot.data.joint_pos[:] = target_joint_pos
-        
-        robot.update(dt=0.0)
-        
-        target_ee_pose = self.get_robot_eef_pose(eef_name, env_ids=None)
-        
-        robot.data.joint_pos[:] = original_joint_pos
-        robot.update(dt=0.0)
-        
-        return {eef_name: target_ee_pose}
+        try:
+            eef_name = "eef"
+            robot = self.scene["robot"]
+            
+            # Store original joint positions
+            current_joint_pos = robot.data.joint_pos.clone()
+            
+            # Set target joint positions
+            target_joint_pos = current_joint_pos.clone()
+            target_joint_pos[:, self.arm_joint_ids] = action[:, :len(self.arm_joint_ids)]
+            
+            # Temporarily update robot state for FK computation
+            original_joint_pos = current_joint_pos.clone()
+            robot.data.joint_pos[:] = target_joint_pos
+            
+            # Update to compute forward kinematics
+            robot.update(dt=0.0)
+            
+            # Get resulting EE pose
+            target_ee_pose = self.get_robot_eef_pose(eef_name, env_ids=None)
+            
+            # Restore original joint positions
+            robot.data.joint_pos[:] = original_joint_pos
+            robot.update(dt=0.0)
+            
+            return {eef_name: target_ee_pose}
+            
+        except Exception as e:
+            carb.log_error(f"[ERROR] Failed in action_to_target_eef_pose")
+            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            raise
     
     def actions_to_gripper_actions(self, actions: torch.Tensor) -> dict[str, torch.Tensor]:
         """Extract gripper actions from action sequence."""
-        if actions.dim() == 3:
-            gripper_actions = actions[:, :, -1:]
-        elif actions.dim() == 2:
-            gripper_actions = actions[:, -1:]
-        else:
-            raise ValueError(f"Unexpected action shape: {actions.shape}")
-    
-        return {"eef": gripper_actions}
+        try:
+            if actions.dim() == 3:
+                gripper_actions = actions[:, :, -1:]
+            elif actions.dim() == 2:
+                gripper_actions = actions[:, -1:]
+            else:
+                raise ValueError(f"Unexpected action shape: {actions.shape}")
+        
+            return {"eef": gripper_actions}
+            
+        except Exception as e:
+            carb.log_error(f"[ERROR] Failed to extract gripper actions")
+            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            raise
     
     def get_object_poses(self, env_ids: Sequence[int] | None = None):
         """Get object poses as 4x4 transformation matrices."""
-        if env_ids is None:
-            env_ids = slice(None)
-        
-        cube = self.scene["cube"]
-        cube_pos = cube.data.root_pos_w[env_ids]
-        cube_quat = cube.data.root_quat_w[env_ids]
-        
-        env_origins = self.scene.env_origins[env_ids]
-        cube_pos = cube_pos - env_origins
-        
-        cube_pose_matrix = PoseUtils.make_pose(
-            cube_pos,
-            PoseUtils.matrix_from_quat(cube_quat)
-        )
-        
-        return {"cube": cube_pose_matrix}
+        try:
+            if env_ids is None:
+                env_ids = slice(None)
+            
+            cube = self.scene["cube"]
+            cube_pos = cube.data.root_pos_w[env_ids]
+            cube_quat = cube.data.root_quat_w[env_ids]
+            
+            # Ensure proper tensor dimensions
+            if cube_pos.dim() == 1:
+                cube_pos = cube_pos.unsqueeze(0)
+            if cube_quat.dim() == 1:
+                cube_quat = cube_quat.unsqueeze(0)
+            
+            # Convert to environment-relative coordinates
+            env_origins = self.scene.env_origins[env_ids]
+            if env_origins.dim() == 1:
+                env_origins = env_origins.unsqueeze(0)
+            cube_pos = cube_pos - env_origins
+            
+            # Create pose matrix
+            cube_pose_matrix = PoseUtils.make_pose(
+                cube_pos,
+                matrix_from_quat(cube_quat)
+            )
+            
+            return {"cube": cube_pose_matrix}
+            
+        except Exception as e:
+            carb.log_error(f"[ERROR] Failed to get object poses")
+            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            raise
 
     def get_subtask_term_signals(self, env_ids: Sequence[int] | None = None) -> dict[str, torch.Tensor]:
         """Get subtask termination signals."""
-        if env_ids is None:
-            env_ids = slice(None)
-        
-        signals = {}
-        
-        if hasattr(self.cfg, 'subtask_configs'):
-            cube = self.scene["cube"]
-            robot = self.scene["robot"]
+        try:
+            if env_ids is None:
+                env_ids = slice(None)
             
-            cube_z = cube.data.root_pos_w[env_ids, 2]
-            gripper_pos = robot.data.joint_pos[env_ids, -1]
+            signals = {}
             
-            initial_cube_height = 0.78
-            pick_threshold = 0.05
-            gripper_closed_threshold = 0.02
+            if hasattr(self.cfg, 'subtask_configs'):
+                cube = self.scene["cube"]
+                robot = self.scene["robot"]
+                
+                cube_z = cube.data.root_pos_w[env_ids, 2]
+                gripper_pos = robot.data.joint_pos[env_ids, -1]
+                
+                initial_cube_height = 0.78
+                pick_threshold = 0.05
+                gripper_closed_threshold = 0.02
+                
+                cube_picked = (cube_z > initial_cube_height + pick_threshold) & (gripper_pos < gripper_closed_threshold)
+                signals["pick_cube"] = cube_picked
+                
+                print(f"[DEBUG] Subtask signals computed:")
+                print(f"  - Cube height: {cube_z.mean().item():.3f}")
+                print(f"  - Gripper position: {gripper_pos.mean().item():.3f}")
+                print(f"  - Cube picked: {cube_picked.sum().item()}/{len(cube_picked)}")
             
-            cube_picked = (cube_z > initial_cube_height + pick_threshold) & (gripper_pos < gripper_closed_threshold)
-            signals["pick_cube"] = cube_picked
-        
-        return signals
+            return signals
+            
+        except Exception as e:
+            carb.log_error(f"[ERROR] Failed to get subtask signals")
+            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            return {}
     
     def serialize(self):
         """Save environment info for re-instantiation."""
-        return dict(env_name=self.spec.id, type=2, env_kwargs=dict())
+        try:
+            return dict(env_name=self.spec.id, type=2, env_kwargs=dict())
+        except Exception as e:
+            carb.log_error(f"[ERROR] Failed to serialize environment")
+            carb.log_error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            return dict(env_name="PickOrangeMimicEnv", type=2, env_kwargs=dict())
