@@ -30,7 +30,7 @@ def degrees_to_radians(degrees: float) -> float:
 
 
 """
-python scripts/environments/teleoperation/teleop_se3_agent.py --task=LeIsaac-SO101-PickOrange-v0 --teleop_device=zmq-so101leader --num_envs=1 --device=cpu --record --dataset_file=./datasets/marketing.hdf5
+python scripts/environments/teleoperation/teleop_se3_agent.py --task=LeIsaac-SO101-ZeroShot-v0 --enable_cameras --teleop_device=zmq-so101leader --num_envs=1 --device=cpu --record --dataset_file=./datasets/marketing.hdf5
 
 """
 
@@ -257,9 +257,8 @@ class ZMQSO101Leader(Device):
         # - others : -100..+100  -> ~-1.745..+1.745 rad
         if joint_name == "gripper":
             radians_val = normalized * degrees_to_radians(100.0)
-        elif joint_name == "shoulder_pan":
+        elif joint_name == "wrist":
             # Flip axis for shoulder_pan
-            radians_val = (normalized - 0.5) * degrees_to_radians(200.0)
             radians_val += np.pi 
         else:
             radians_val = (normalized - 0.5) * degrees_to_radians(200.0)
