@@ -332,11 +332,12 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
         )
     )
     
-    # Cube to pick - positioned on studio floor
+    
+    # Small servo - black rectangular cube in the middle
     cube: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Cube",
         spawn=sim_utils.CuboidCfg(
-            size=(0.03, 0.03, 0.03),
+            size=(0.08, 0.04, 0.07),  # Small rectangular servo dimensions
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 solver_position_iteration_count=16,
                 solver_velocity_iteration_count=1,
@@ -345,23 +346,23 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
                 max_depenetration_velocity=5.0,
                 disable_gravity=False,
             ),
-            mass_props=sim_utils.MassPropertiesCfg(mass=0.05),
+            mass_props=sim_utils.MassPropertiesCfg(mass=0.08),
             collision_props=sim_utils.CollisionPropertiesCfg(
                 collision_enabled=True,
             ),
             physics_material=sim_utils.RigidBodyMaterialCfg(
-                static_friction=2.0,
-                dynamic_friction=1.5,
+                static_friction=2.5,
+                dynamic_friction=2.0,
                 restitution=0.0,
             ),
             visual_material=sim_utils.PreviewSurfaceCfg(
-                diffuse_color=(0.95, 0.55, 0.15),  # More realistic orange
-                metallic=0.02,  # Tiny bit of sheen
-                roughness=0.75,
+                diffuse_color=(0.1, 0.1, 0.1),  # Black servo
+                metallic=0.1,  # Slight metallic sheen
+                roughness=0.6,
             )
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(0.0, 1.0, 0.065),  # On studio floor on existing table, centered between robots
+            pos=(0.0, 0.85, 0.0675),  # Middle of scene, slightly forward of center
             rot=(1.0, 0.0, 0.0, 0.0),
         )
     )
@@ -529,7 +530,21 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
     )
 
     # The robots - two side by side
-    robot_left: ArticulationCfg = SO101_FOLLOWER_CFG.replace(prim_path="{ENV_REGEX_NS}/RobotLeft")
+    robot_left: ArticulationCfg = SO101_FOLLOWER_CFG.replace(
+        prim_path="{ENV_REGEX_NS}/RobotLeft",
+        init_state=ArticulationCfg.InitialStateCfg(
+            pos=(0.25, 0.5, 0.0),  # Will be overridden in __post_init__
+            rot=(0.0, 0.0, 0.0, 1.0),
+            joint_pos={
+                "shoulder_pan": 0.0,
+                "shoulder_lift": -1.745,  # -100 degrees in radians
+                "elbow_flex": 1.570,  # 90 degrees in radians
+                "wrist_flex": -0.873,  # 50 degrees in radians
+                "wrist_roll": 0.0,
+                "gripper": -0.174  # -10 degrees in radians
+            }
+        )
+    )
     robot: ArticulationCfg = SO101_FOLLOWER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
     
     # Ambient dome light - soft, natural lighting
@@ -714,10 +729,10 @@ class ZeroShotEnvCfg(ManagerBasedRLEnvCfg):
 
         # Position both robots on the studio floor (on table) at the front edge, rotated 180° around z-axis
         # robot_left is visual only - not controlled by teleoperation
-        self.scene.robot_left.init_state.pos = (-0.25, 0.5, 0.05)  # Left robot on existing table (visual only)
+        self.scene.robot_left.init_state.pos = (0.25, 0.5, 0.0)  # Right position on existing table (visual only)
         self.scene.robot_left.init_state.rot = (0.0, 0.0, 0.0, 1.0)  # 180° rotation around z-axis (w, x, y, z)
         # robot is the main controllable robot
-        self.scene.robot.init_state.pos = (0.25, 0.5, 0.05)  # Right robot on existing table (main controllable)
+        self.scene.robot.init_state.pos = (-0.25, 0.5, 0.0)  # Left position on existing table (main controllable)
         self.scene.robot.init_state.rot = (0.0, 0.0, 0.0, 1.0)  # 180° rotation around z-axis (w, x, y, z)
         
         # No need for parse_usd_and_create_subassets since we're creating objects programmatically
