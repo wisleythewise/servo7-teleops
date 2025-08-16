@@ -6,6 +6,7 @@ from typing import Any
 import isaaclab.sim as sim_utils
 from isaaclab.envs.mdp.recorders.recorders_cfg import ActionStateRecorderManagerCfg as RecordTerm
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
+from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
@@ -337,7 +338,7 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
     cube: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Cube",
         spawn=sim_utils.CuboidCfg(
-            size=(0.08, 0.04, 0.07),  # Small rectangular servo dimensions
+            size=(0.07, 0.04, 0.05),  # Small rectangular servo dimensions
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 solver_position_iteration_count=16,
                 solver_velocity_iteration_count=1,
@@ -543,7 +544,24 @@ class ZeroShotSceneCfg(InteractiveSceneCfg):
                 "wrist_roll": 0.0,
                 "gripper": -0.174  # -10 degrees in radians
             }
-        )
+        ),
+        # Configure actuators with high stiffness to maintain position
+        actuators={
+            "sts3215-gripper": ImplicitActuatorCfg(
+                joint_names_expr=["gripper"],
+                effort_limit_sim=100,
+                velocity_limit_sim=0.000001,
+                stiffness=1000.0,  # Very high stiffness to maintain position
+                damping=100.0,  # High damping to prevent oscillations
+            ),
+            "sts3215-arm": ImplicitActuatorCfg(
+                joint_names_expr=["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll"],
+                effort_limit_sim=100,
+                velocity_limit_sim=0.000001,
+                stiffness=1000.0,  # Very high stiffness to maintain position
+                damping=100.0,  # High damping to prevent oscillations
+            )
+        }
     )
     robot: ArticulationCfg = SO101_FOLLOWER_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
     
